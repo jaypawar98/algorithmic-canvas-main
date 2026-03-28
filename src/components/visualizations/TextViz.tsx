@@ -6,7 +6,15 @@ interface Props {
   algorithmName: string;
 }
 
-type TextStep = { textHighlight: number[]; patternPos: number; patternHighlight: number[]; matchFound?: number; info?: string };
+type TextStep = {
+  textHighlight: number[];
+  patternPos: number;
+  patternHighlight: number[];
+  matchFound?: number;
+  info?: string;
+  /** Cumulative log lines (e.g. Rabin-Karp + LogTracer panel) */
+  logs?: string[];
+};
 
 function naiveSearch(text: string, pattern: string): TextStep[] {
   const steps: TextStep[] = [];
@@ -57,30 +65,75 @@ function kmpSearch(text: string, pattern: string): TextStep[] {
 
 function rabinKarpSearch(text: string, pattern: string): TextStep[] {
   const steps: TextStep[] = [];
+  const logs: string[] = [];
   const d = 256, q = 101;
   const m = pattern.length;
+  if (m === 0 || text.length < m) return steps;
+
   let pHash = 0, tHash = 0, h = 1;
   for (let i = 0; i < m - 1; i++) h = (h * d) % q;
   for (let i = 0; i < m; i++) {
     pHash = (d * pHash + pattern.charCodeAt(i)) % q;
     tHash = (d * tHash + text.charCodeAt(i)) % q;
   }
+  logs.push(`pattern hash pHash = ${pHash}`);
+  logs.push(`first window tHash (text[0..${m - 1}]) = ${tHash}`);
+
   for (let i = 0; i <= text.length - m; i++) {
     const window = Array.from({ length: m }, (_, k) => i + k);
-    steps.push({ textHighlight: window, patternPos: i, patternHighlight: [], info: `Hash compare at pos ${i}` });
+    logs.push(`i=${i}: compare pHash (${pHash}) with tHash (${tHash})`);
+    steps.push({
+      textHighlight: window,
+      patternPos: i,
+      patternHighlight: [],
+      logs: [...logs],
+      info: `Hash compare at position ${i}`,
+    });
     if (pHash === tHash) {
       let match = true;
       for (let j = 0; j < m; j++) {
-        steps.push({ textHighlight: [i + j], patternPos: i, patternHighlight: [j], info: `Hash match! Verifying char ${j}` });
-        if (text[i + j] !== pattern[j]) { match = false; break; }
+        logs.push(
+          `Verify j=${j}: text[${i + j}]='${text[i + j] ?? ""}' vs pattern[${j}]='${pattern[j] ?? ""}'`,
+        );
+        steps.push({
+          textHighlight: [i + j],
+          patternPos: i,
+          patternHighlight: [j],
+          logs: [...logs],
+          info: `Hash match — verifying character ${j}`,
+        });
+        if (text[i + j] !== pattern[j]) {
+          match = false;
+          logs.push(`Mismatch at j=${j} — spurious hash hit`);
+          steps.push({
+            textHighlight: window,
+            patternPos: i,
+            patternHighlight: [],
+            logs: [...logs],
+            info: `Spurious hit at ${i}`,
+          });
+          break;
+        }
       }
       if (match) {
-        steps.push({ textHighlight: window, patternPos: i, patternHighlight: Array.from({ length: m }, (_, k) => k), matchFound: i, info: `Match at ${i}!` });
+        logs.push(`Match confirmed at index ${i}`);
+        steps.push({
+          textHighlight: window,
+          patternPos: i,
+          patternHighlight: Array.from({ length: m }, (_, k) => k),
+          matchFound: i,
+          logs: [...logs],
+          info: `Match at ${i}!`,
+        });
       }
+    } else {
+      logs.push("Hashes differ — skip character comparison");
     }
     if (i < text.length - m) {
+      const prev = tHash;
       tHash = (d * (tHash - text.charCodeAt(i) * h) + text.charCodeAt(i + m)) % q;
       if (tHash < 0) tHash += q;
+      logs.push(`Rolling hash: ${prev} → ${tHash} (drop '${text[i]}', add '${text[i + m]}')`);
     }
   }
   return steps;
@@ -207,11 +260,16 @@ export function TextViz({ isPlaying, speed, algorithmName }: Props) {
   const { text, pattern } = config.current;
   const isCipher = algorithmName.includes("Caesar") || algorithmName.includes("Affine");
   const isSuffix = algorithmName.includes("Suffix");
+  const isRabinKarp = algorithmName.includes("Rabin-Karp");
+  const showPatternRow = !isCipher && !isSuffix && pattern && (step !== null || isRabinKarp);
+  const patternPos = step?.patternPos ?? 0;
+  const patternHighlight = step?.patternHighlight ?? [];
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-6">
       <div className="text-xs text-muted-foreground">{algorithmName}</div>
-      <div className="flex flex-col gap-3 font-mono">
+      <div className={`flex flex-col gap-3 font-mono w-full max-w-full ${isRabinKarp ? "px-2" : ""}`}>
+        {isRabinKarp && <div className="text-[10px] text-muted-foreground mb-2">text</div>}
         <div className="flex gap-0.5">
           {text.split("").map((ch, i) => (
             <span
@@ -220,12 +278,12 @@ export function TextViz({ isPlaying, speed, algorithmName }: Props) {
               style={{
                 background: step?.matchFound !== undefined && i >= step.matchFound && i < step.matchFound + pattern.length
                   ? "hsl(145, 60%, 35%)"
-                  : step?.textHighlight.includes(i)
+                  : step?.textHighlight?.includes(i)
                   ? "hsl(45, 70%, 30%)"
                   : "hsl(150, 15%, 12%)",
                 color: step?.matchFound !== undefined && i >= step.matchFound && i < step.matchFound + pattern.length
                   ? "hsl(150, 30%, 4%)"
-                  : step?.textHighlight.includes(i)
+                  : step?.textHighlight?.includes(i)
                   ? "hsl(45, 90%, 80%)"
                   : "hsl(150, 20%, 80%)",
                 border: "1px solid hsl(150, 15%, 20%)",
@@ -235,25 +293,43 @@ export function TextViz({ isPlaying, speed, algorithmName }: Props) {
             </span>
           ))}
         </div>
-        {!isCipher && !isSuffix && pattern && step && (
-          <div className="flex gap-0.5" style={{ paddingLeft: `${(step.patternPos ?? 0) * 26}px` }}>
-            {pattern.split("").map((ch, i) => (
-              <span
-                key={i}
-                className="w-6 h-8 flex items-center justify-center text-xs rounded border border-primary/40 text-primary"
-                style={{
-                  background: step.patternHighlight.includes(i) ? "hsl(145, 60%, 45%, 0.2)" : "hsl(145, 60%, 45%, 0.05)",
-                  fontWeight: step.patternHighlight.includes(i) ? 700 : 400,
-                }}
-              >
-                {ch}
-              </span>
-            ))}
-          </div>
+        {showPatternRow && (
+          <>
+            {isRabinKarp && <div className="text-[10px] text-muted-foreground mb-2 mt-1">pattern</div>}
+            <div className="flex gap-0.5" style={{ paddingLeft: `${patternPos * 26}px` }}>
+              {pattern.split("").map((ch, i) => (
+                <span
+                  key={i}
+                  className="w-6 h-8 flex items-center justify-center text-xs rounded border border-primary/40 text-primary"
+                  style={{
+                    background: patternHighlight.includes(i) ? "hsl(145, 60%, 45%, 0.2)" : "hsl(145, 60%, 45%, 0.05)",
+                    fontWeight: patternHighlight.includes(i) ? 700 : 400,
+                  }}
+                >
+                  {ch}
+                </span>
+              ))}
+            </div>
+          </>
         )}
       </div>
-      {step?.info && (
-        <div className="text-[10px] text-muted-foreground font-mono px-4 text-center">{step.info}</div>
+      {isRabinKarp ? (
+        <div className="w-full max-w-lg mt-2 border-t border-border/20 pt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
+            {(step?.logs?.length ?? 0) > 0 ? (
+              (step?.logs ?? []).slice(-8).map((entry, index) => (
+                <div key={`${index}-${entry.slice(0, 40)}`}>{entry}</div>
+              ))
+            ) : (
+              <div>Press play to start the search.</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        step?.info && (
+          <div className="text-[10px] text-muted-foreground font-mono px-4 text-center">{step.info}</div>
+        )
       )}
       <button onClick={reset} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
     </div>

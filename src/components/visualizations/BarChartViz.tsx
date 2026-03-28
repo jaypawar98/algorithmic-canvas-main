@@ -25,6 +25,8 @@ const combDemoArray = [3, 4, 4, 1, 4, 6, 5, 8, 6, 8, 7, 9, 9, 8, 8];
 const cycleDemoArray = [7, 1, 9, 4, 6, 6, 9, 5, 8, 3, 6, 6, 4, 4, 9];
 const heapsortDemoArray = [4, 3, 8, 7, 4, 1, 4, 6, 7, 8];
 const insertionDemoArray = [9, 5, 1, 7, 3, 3, 8, 5, 4, 9, 9, 9, 8, 5, 2];
+/** Matches classic Selection Sort traces (e.g. algorithm-visualizer). */
+const selectionDemoArray = [5, 1, 2, 8, 7, 7, 7, 3, 1, 8, 7, 5, 3, 7, 7];
 const pancakeDemoArray = [3, 3, 4, 8, 6, 1, 5, 5, 8, 6];
 
 function generateArray(len = 20) {
@@ -91,18 +93,54 @@ function selectionSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
   const n = a.length;
+  const originalStr = input.join(", ");
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: [],
+    log: `original array = [${originalStr}]`,
+  });
   for (let i = 0; i < n - 1; i++) {
     let minIdx = i;
     for (let j = i + 1; j < n; j++) {
-      steps.push({ arr: [...a], comparing: [minIdx, j], sorted: Array.from({ length: i }, (_, k) => k) });
+      steps.push({
+        arr: [...a],
+        comparing: [minIdx, j],
+        sorted: Array.from({ length: i }, (_, k) => k),
+        log:
+          a[j] < a[minIdx]
+            ? `Compare index ${minIdx} (${a[minIdx]}) with index ${j} (${a[j]}) — new minimum at ${j}.`
+            : `Compare index ${minIdx} (${a[minIdx]}) with index ${j} (${a[j]}).`,
+      });
       if (a[j] < a[minIdx]) minIdx = j;
     }
     if (minIdx !== i) {
+      const vI = a[i];
+      const vMin = a[minIdx];
       [a[i], a[minIdx]] = [a[minIdx], a[i]];
+      steps.push({
+        arr: [...a],
+        comparing: [i, minIdx],
+        sorted: Array.from({ length: i }, (_, k) => k),
+        log: `swap ${vI} and ${vMin}`,
+      });
     }
-    steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: i + 1 }, (_, k) => k) });
+    steps.push({
+      arr: [...a],
+      comparing: [],
+      sorted: Array.from({ length: i + 1 }, (_, k) => k),
+      log:
+        minIdx === i
+          ? `Index ${i} already held the minimum; no swap.`
+          : `Placed minimum at index ${i}; sorted prefix is 0..${i}.`,
+    });
   }
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: n }, (_, i) => i) });
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+    log: "Array is fully sorted.",
+  });
   return steps;
 }
 
@@ -912,6 +950,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   const isCycleSort = algorithmName === "Cycle Sort";
   const isHeapsort = algorithmName === "Heapsort";
   const isInsertionSort = algorithmName === "Insertion Sort";
+  const isSelectionSort = algorithmName === "Selection Sort";
   const isPancakeSort = algorithmName === "Pancake Sort";
 
   const reset = useCallback(() => {
@@ -925,9 +964,11 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
             ? [...heapsortDemoArray]
             : isInsertionSort
               ? [...insertionDemoArray]
-              : isPancakeSort
-                ? [...pancakeDemoArray]
-                : generateArray();
+              : isSelectionSort
+                ? [...selectionDemoArray]
+                : isPancakeSort
+                  ? [...pancakeDemoArray]
+                  : generateArray();
     setArr(newArr);
     setComparing([]);
     setSorted(new Set());
@@ -939,7 +980,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
     stepsRef.current = getSteps(algorithmName, newArr);
     onCodeMarkerChange?.(stepsRef.current[0]?.codeMarker ?? null);
     onStep?.(0, stepsRef.current.length);
-  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, isPancakeSort, onCodeMarkerChange, onStep]);
+  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, isSelectionSort, isPancakeSort, onCodeMarkerChange, onStep]);
 
   useEffect(() => {
     reset();
@@ -1212,6 +1253,86 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
             <div>{log || "Press play to start Insertion Sort."}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  if (isSelectionSort) {
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">ChartTracer</div>
+          <div className="flex-1 border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="h-full flex items-end justify-center gap-3">
+              {arr.map((val, i) => {
+                const isComparing = comparing.includes(i);
+                const isSorted = sorted.has(i);
+                return (
+                  <div key={i} className="flex-1 max-w-10 flex flex-col items-center justify-end gap-2 h-full">
+                    <div
+                      className="w-full rounded-t-sm transition-all"
+                      style={{
+                        height: `${(val / maxVal) * 78}%`,
+                        background: isComparing
+                          ? "hsl(224, 85%, 58%)"
+                          : isSorted
+                            ? "hsl(145, 60%, 45%)"
+                            : "hsl(0, 0%, 72%)",
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="flex justify-center gap-1 mb-2">
+              {arr.map((_, i) => (
+                <div key={`idx-${i}`} className="w-7 text-center text-[10px] text-muted-foreground">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-1">
+              {arr.map((val, i) => (
+                <div
+                  key={`sel-val-${i}`}
+                  className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
+                  style={{
+                    background: comparing.includes(i)
+                      ? "hsl(224, 85%, 58%)"
+                      : sorted.has(i)
+                        ? "hsl(145, 60%, 45%)"
+                        : "hsl(150, 10%, 22%)",
+                    borderColor: comparing.includes(i) ? "hsl(224, 85%, 68%)" : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 min-h-28">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
+            <div>{log || "Press play to start Selection Sort."}</div>
           </div>
         </div>
 
