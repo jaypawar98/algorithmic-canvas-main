@@ -835,7 +835,7 @@ void dfs(int u, int parent, int adj[][MAX], int n, int disc[], int low[], bool v
 }`)
     },
     {
-      name: "Heapsort", vizType: "tree",
+      name: "Heapsort", vizType: "bars",
       description: "Sort by building and extracting from a heap",
       complexity: { time: "O(n log n)", space: "O(1)" },
       code: c("Heapsort",

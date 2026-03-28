@@ -196,12 +196,21 @@ function heapSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
   const n = a.length;
+  const sortedSuffix = (heapSize: number) =>
+    Array.from({ length: n - heapSize }, (_, k) => heapSize + k);
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: [],
+    codeMarker: "init-length",
+    log: `Initialize N = ${n} and start Heapsort.`,
+  });
   steps.push({
     arr: [...a],
     comparing: [],
     sorted: [],
     codeMarker: "build-heap",
-    log: "Start building the max heap.",
+    log: "Build max heap from the array indices 0 .. N - 1.",
   });
 
   function heapify(size: number, i: number) {
@@ -211,9 +220,9 @@ function heapSortSteps(input: number[]): Step[] {
       steps.push({
         arr: [...a],
         comparing: [i, l],
-        sorted: Array.from({ length: n - size }, (_, k) => n - 1 - k),
+        sorted: sortedSuffix(size),
         codeMarker: "compare-child",
-        log: `Compare root ${a[i]} with left child ${a[l]}.`,
+        log: `Compare index ${i} (${a[i]}) with left child index ${l} (${a[l]}).`,
       });
       if (a[l] > a[largest]) largest = l;
     }
@@ -221,9 +230,9 @@ function heapSortSteps(input: number[]): Step[] {
       steps.push({
         arr: [...a],
         comparing: [largest, r],
-        sorted: Array.from({ length: n - size }, (_, k) => n - 1 - k),
+        sorted: sortedSuffix(size),
         codeMarker: "compare-child",
-        log: `Compare current largest with right child ${a[r]}.`,
+        log: `Compare index ${largest} (${a[largest]}) with right child index ${r} (${a[r]}).`,
       });
       if (a[r] > a[largest]) largest = r;
     }
@@ -231,17 +240,17 @@ function heapSortSteps(input: number[]): Step[] {
       steps.push({
         arr: [...a],
         comparing: [i, largest],
-        sorted: Array.from({ length: n - size }, (_, k) => n - 1 - k),
+        sorted: sortedSuffix(size),
         codeMarker: "swap-root",
-        log: `Swap ${a[i]} with ${a[largest]}.`,
+        log: `Swap index ${i} (${a[i]}) with index ${largest} (${a[largest]}).`,
       });
       [a[i], a[largest]] = [a[largest], a[i]];
       steps.push({
         arr: [...a],
         comparing: [],
-        sorted: Array.from({ length: n - size }, (_, k) => n - 1 - k),
+        sorted: sortedSuffix(size),
         codeMarker: "heapify-down",
-        log: "Continue heapifying downward.",
+        log: "Heapify downward to restore the max-heap property.",
       });
       heapify(size, largest);
     }
@@ -253,23 +262,25 @@ function heapSortSteps(input: number[]): Step[] {
     comparing: [],
     sorted: [],
     codeMarker: "build-heap",
-    log: "Max heap built.",
+    log: "Max heap is ready; root holds the largest value.",
   });
   for (let i = n - 1; i > 0; i--) {
     steps.push({
       arr: [...a],
       comparing: [0, i],
-      sorted: Array.from({ length: n - i }, (_, k) => n - 1 - k),
+      sorted: sortedSuffix(i + 1),
       codeMarker: "extract-max",
-      log: `Move max ${a[0]} to sorted position ${i}.`,
+      log: `Compare index 0 (${a[0]}) with index ${i} (${a[i]}); place max at index ${i}.`,
     });
+    const rootVal = a[0];
+    const tailVal = a[i];
     [a[0], a[i]] = [a[i], a[0]];
     steps.push({
       arr: [...a],
       comparing: [],
-      sorted: Array.from({ length: n - i + 1 }, (_, k) => n - 1 - k),
+      sorted: sortedSuffix(i),
       codeMarker: "heapify-down",
-      log: "Restore heap property on the reduced heap.",
+      log: `Swapping elements: ${rootVal} & ${tailVal}.`,
     });
     heapify(i, 0);
   }
@@ -278,7 +289,7 @@ function heapSortSteps(input: number[]): Step[] {
     comparing: [],
     sorted: Array.from({ length: n }, (_, i) => i),
     codeMarker: "return-sorted",
-    log: "Heapsort is complete.",
+    log: "Array is fully sorted.",
   });
   return steps;
 }
@@ -1197,17 +1208,17 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
             <div className="h-full flex items-end justify-center gap-3">
               {arr.map((val, i) => {
                 const isComparing = comparing.includes(i);
-                const isSorted = sorted.has(arr.length - 1 - i);
+                const isSorted = sorted.has(i);
                 return (
-                  <div key={i} className="flex-1 max-w-12 flex flex-col items-center justify-end gap-2 h-full">
+                  <div key={i} className="flex-1 max-w-10 flex flex-col items-center justify-end gap-2 h-full">
                     <div
                       className="w-full rounded-t-sm transition-all"
                       style={{
                         height: `${(val / maxVal) * 78}%`,
-                        background: isSorted
-                            ? "hsl(330, 85%, 48%)"
-                          : isComparing
-                            ? "hsl(224, 85%, 58%)"
+                        background: isComparing
+                          ? "hsl(224, 85%, 58%)"
+                          : isSorted
+                            ? "hsl(145, 60%, 45%)"
                             : "hsl(0, 0%, 72%)",
                       }}
                     />
@@ -1230,31 +1241,23 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
               ))}
             </div>
             <div className="flex justify-center gap-1">
-              {arr.map((val, i) => {
-                const isComparing = comparing.includes(i);
-                const isSorted = sorted.has(arr.length - 1 - i);
-                return (
-                  <div
-                    key={`heap-val-${i}`}
-                    className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
-                    style={{
-                      background: isSorted
-                        ? "hsl(330, 85%, 48%)"
-                        : isComparing
-                          ? "hsl(224, 85%, 58%)"
-                          : "hsl(150, 10%, 22%)",
-                      borderColor: isSorted
-                        ? "hsl(330, 85%, 60%)"
-                        : isComparing
-                          ? "hsl(224, 85%, 68%)"
-                          : "hsl(150, 10%, 30%)",
-                      color: "hsl(150, 20%, 92%)",
-                    }}
-                  >
-                    {val}
-                  </div>
-                );
-              })}
+              {arr.map((val, i) => (
+                <div
+                  key={`heap-val-${i}`}
+                  className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
+                  style={{
+                    background: comparing.includes(i)
+                      ? "hsl(224, 85%, 58%)"
+                      : sorted.has(i)
+                        ? "hsl(145, 60%, 45%)"
+                        : "hsl(150, 10%, 22%)",
+                    borderColor: comparing.includes(i) ? "hsl(224, 85%, 68%)" : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
             </div>
           </div>
         </div>
