@@ -21,6 +21,11 @@ interface GStep {
   pageRanks?: number[];
   outDegrees?: number[];
   incomingMatrix?: number[][];
+  /** Tarjan SCC tracers (algorithm-visualizer style) */
+  tarjanDisc?: number[];
+  tarjanLow?: number[];
+  tarjanOnStack?: boolean[];
+  tarjanStack?: number[];
 }
 
 function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
@@ -153,6 +158,27 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
       { from: 4, to: 3, weight: 1 },
       { from: 2, to: 3, weight: 1 },
       { from: 1, to: 2, weight: 1 },
+    ];
+    return { nodes, edges };
+  }
+
+  if (algorithmName.includes("Tarjan") || algorithmName.includes("Strongly Connected")) {
+    const nodes: Node[] = [
+      { id: 0, x: 200, y: 55 },
+      { id: 1, x: 310, y: 115 },
+      { id: 2, x: 285, y: 210 },
+      { id: 3, x: 115, y: 210 },
+      { id: 4, x: 90, y: 115 },
+      { id: 5, x: 200, y: 285 },
+    ];
+    const edges: Edge[] = [
+      { from: 0, to: 1, weight: 1 },
+      { from: 1, to: 2, weight: 1 },
+      { from: 2, to: 0, weight: 1 },
+      { from: 2, to: 3, weight: 1 },
+      { from: 3, to: 4, weight: 1 },
+      { from: 4, to: 5, weight: 1 },
+      { from: 5, to: 3, weight: 1 },
     ];
     return { nodes, edges };
   }
@@ -597,7 +623,6 @@ function hamiltonianSteps(nodes: Node[], edges: Edge[]): GStep[] {
 function tarjanSCCSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const n = nodes.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
-  // Directed edges: use from→to only
   edges.forEach(e => { adj[e.from].push(e.to); });
   const disc = Array(n).fill(-1);
   const low = Array(n).fill(-1);
@@ -607,46 +632,93 @@ function tarjanSCCSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const steps: GStep[] = [];
   const visited: number[] = [];
   const ae: string[] = [];
-  const sccColors: Record<number, string> = {};
+  const logs: string[] = [];
   let sccCount = 0;
-  const colors = ["0", "1", "2", "3", "4"];
+
+  const labelsFromDiscLow = (): Record<number, string> => {
+    const labels: Record<number, string> = {};
+    for (let i = 0; i < n; i++) {
+      if (disc[i] >= 0) labels[i] = `${disc[i]}/${low[i]}`;
+    }
+    return labels;
+  };
+
+  const record = (u: number, labelOverride?: Record<number, string>) => {
+    steps.push({
+      visited: [...visited],
+      current: u,
+      activeEdges: [...ae],
+      nodeLabels: labelOverride !== undefined ? labelOverride : labelsFromDiscLow(),
+      tarjanDisc: [...disc],
+      tarjanLow: [...low],
+      tarjanOnStack: onStack.map(Boolean),
+      tarjanStack: [...stack],
+      logs: [...logs],
+    });
+  };
+
+  logs.push("Initialize disc[i] = low[i] = -1; stack empty; stackMember[i] = false.");
+  record(-1, {});
 
   function dfs(u: number) {
     disc[u] = low[u] = timer++;
     stack.push(u);
     onStack[u] = true;
     visited.push(u);
-    const labels: Record<number, string> = {};
-    for (let i = 0; i < n; i++) if (disc[i] >= 0) labels[i] = `${disc[i]}/${low[i]}`;
-    steps.push({ visited: [...visited], current: u, activeEdges: [...ae], nodeLabels: labels });
+    logs.push(`Visit ${u}: disc[${u}] = low[${u}] = ${disc[u]}, push ${u} on stack.`);
+    record(u);
 
     for (const v of adj[u]) {
       if (disc[v] === -1) {
-        ae.push(edgeKey(u, v));
+        ae.push(directedEdgeKey(u, v));
+        logs.push(`Edge ${u} → ${v}: tree edge, DFS into ${v}.`);
+        record(u);
         dfs(v);
         low[u] = Math.min(low[u], low[v]);
+        logs.push(`Return from ${v}: low[${u}] = min(low[${u}], low[${v}]) = ${low[u]}.`);
+        record(u);
       } else if (onStack[v]) {
         low[u] = Math.min(low[u], disc[v]);
+        logs.push(`Edge ${u} → ${v}: ${v} on stack → low[${u}] = min(low[${u}], disc[${v}]) = ${low[u]}.`);
+        record(u);
       }
     }
 
     if (low[u] === disc[u]) {
-      const scc: number[] = [];
+      sccCount++;
+      logs.push(`low[${u}] == disc[${u}]: pop strongly connected component #${sccCount}.`);
+      const labels2: Record<number, string> = { ...labelsFromDiscLow() };
       while (true) {
         const v = stack.pop()!;
         onStack[v] = false;
-        scc.push(v);
-        sccColors[v] = colors[sccCount % colors.length];
+        labels2[v] = `SCC${sccCount}`;
         if (v === u) break;
       }
-      sccCount++;
-      const labels2: Record<number, string> = {};
-      for (const v of scc) labels2[v] = `SCC${sccCount}`;
-      steps.push({ visited: [...visited], current: u, activeEdges: [...ae], nodeLabels: labels2 });
+      record(u, labels2);
     }
   }
 
-  for (let i = 0; i < n; i++) if (disc[i] === -1) dfs(i);
+  for (let i = 0; i < n; i++) {
+    if (disc[i] === -1) {
+      logs.push(`Start DFS from source node ${i}.`);
+      dfs(i);
+    }
+  }
+  logs.push("Tarjan finished — all SCCs extracted.");
+  const tail = steps[steps.length - 1];
+  if (tail) {
+    steps.push({
+      visited: [...tail.visited],
+      current: tail.current,
+      activeEdges: [...tail.activeEdges],
+      nodeLabels: tail.nodeLabels ? { ...tail.nodeLabels } : undefined,
+      tarjanDisc: [...(tail.tarjanDisc ?? [])],
+      tarjanLow: [...(tail.tarjanLow ?? [])],
+      tarjanOnStack: [...(tail.tarjanOnStack ?? [])],
+      tarjanStack: [...(tail.tarjanStack ?? [])],
+      logs: [...logs],
+    });
+  }
   return steps;
 }
 
@@ -990,6 +1062,10 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const [pageRanks, setPageRanks] = useState<number[]>([]);
   const [outDegrees, setOutDegrees] = useState<number[]>([]);
   const [incomingMatrix, setIncomingMatrix] = useState<number[][]>([]);
+  const [tarjanDisc, setTarjanDisc] = useState<number[]>([]);
+  const [tarjanLow, setTarjanLow] = useState<number[]>([]);
+  const [tarjanOnStack, setTarjanOnStack] = useState<boolean[]>([]);
+  const [tarjanStack, setTarjanStack] = useState<number[]>([]);
   const stepRef = useRef(0);
   const stepsRef = useRef<GStep[]>([]);
   const intervalRef = useRef<number | null>(null);
@@ -1009,7 +1085,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         }
         const s = stepsRef.current[stepRef.current];
         setVisited(new Set(s.visited));
-        setCurrentNode(s.current);
+        setCurrentNode(s.current < 0 ? null : s.current);
         setActiveEdges(new Set(s.activeEdges));
         if (s.nodeLabels) setNodeLabels(s.nodeLabels);
         setDistanceLabels(s.distanceLabels ?? {});
@@ -1018,6 +1094,10 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         setPageRanks(s.pageRanks ?? []);
         setOutDegrees(s.outDegrees ?? []);
         setIncomingMatrix(s.incomingMatrix ?? []);
+        setTarjanDisc(s.tarjanDisc ?? []);
+        setTarjanLow(s.tarjanLow ?? []);
+        setTarjanOnStack(s.tarjanOnStack ?? []);
+        setTarjanStack(s.tarjanStack ?? []);
         onCodeMarkerChange?.(s.codeMarker ?? null);
         stepRef.current++;
       }, Math.max(100, 800 - speed * 70));
@@ -1039,6 +1119,10 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
     setPageRanks(z?.pageRanks ?? []);
     setOutDegrees(z?.outDegrees ?? []);
     setIncomingMatrix(z?.incomingMatrix ?? []);
+    setTarjanDisc(z?.tarjanDisc ?? []);
+    setTarjanLow(z?.tarjanLow ?? []);
+    setTarjanOnStack(z?.tarjanOnStack ?? []);
+    setTarjanStack(z?.tarjanStack ?? []);
     onCodeMarkerChange?.(stepsRef.current[0]?.codeMarker ?? null);
     stepRef.current = 0;
   };
@@ -1053,14 +1137,18 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const isBipartite = algorithmName.includes("Bipartite");
   const isBridgeFinding = algorithmName.includes("Bridge");
   const isPageRank = algorithmName.includes("PageRank");
+  const isTarjan = algorithmName.includes("Tarjan") || algorithmName.includes("Strongly Connected");
 
   return (
-    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank) ? "justify-start pt-2" : "justify-center"}`}>
+    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan) ? "justify-start pt-2" : "justify-center"}`}>
       {isPageRank && (
         <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">Web Page inter-connections</div>
       )}
-      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
-        {(isTopological || isPageRank) && (
+      {isTarjan && (
+        <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">GraphTracer</div>
+      )}
+      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : isTarjan ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
+        {(isTopological || isPageRank || isTarjan) && (
           <defs>
             <marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(0, 0%, 72%)" />
@@ -1070,7 +1158,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.edges.map((e) => {
           const from = graph.nodes[e.from];
           const to = graph.nodes[e.to];
-          const ek = isPageRank ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
+          const ek = (isPageRank || isTarjan) ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
           const active = activeEdges.has(ek);
           const edgeStroke = isBipartite
             ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
@@ -1080,6 +1168,8 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
               ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
               : isPageRank
                 ? active ? "hsl(0, 0%, 78%)" : "hsl(0, 0%, 52%)"
+              : isTarjan
+                ? active ? "hsl(330, 85%, 58%)" : "hsl(0, 0%, 55%)"
             : active ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 25%)";
           return (
             <g key={ek}>
@@ -1087,8 +1177,8 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 x1={from.x} y1={from.y} x2={to.x} y2={to.y}
                 stroke={edgeStroke}
                 strokeWidth={active ? 3 : 1.5}
-                opacity={(isBipartite || isBFS || isDFS || isPageRank) ? 1 : active ? 1 : 0.5}
-                markerEnd={isTopological || isPageRank ? "url(#graph-arrow)" : undefined}
+                opacity={(isBipartite || isBFS || isDFS || isPageRank || isTarjan) ? 1 : active ? 1 : 0.5}
+                markerEnd={isTopological || isPageRank || isTarjan ? "url(#graph-arrow)" : undefined}
               />
               {showWeights && (
                 <text
@@ -1111,9 +1201,10 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
             : colorValue === 1
               ? "hsl(335, 78%, 42%)"
               : "hsl(150, 20%, 12%)";
+          const tarjanVisited = isTarjan && isVisited;
           return (
             <g key={n.id}>
-              {isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && (
+              {isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan && (
                 <circle cx={n.x} cy={n.y} r={22} fill="none"
                   stroke="hsl(145, 60%, 45%)" strokeWidth={2} opacity={0.4} />
               )}
@@ -1121,16 +1212,22 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 <circle cx={n.x} cy={n.y} r={22} fill="none"
                   stroke="hsl(330, 85%, 58%)" strokeWidth={2} opacity={0.45} />
               )}
+              {isCurrent && isTarjan && (
+                <circle cx={n.x} cy={n.y} r={22} fill="none"
+                  stroke="hsl(330, 85%, 65%)" strokeWidth={2} opacity={0.5} />
+              )}
               <circle
                 cx={n.x} cy={n.y} r={16}
                 fill={isPageRank
                   ? (isCurrent ? "hsl(330, 85%, 42%)" : "hsl(150, 20%, 14%)")
+                  : isTarjan
+                    ? (tarjanVisited ? (isCurrent ? "hsl(330, 85%, 52%)" : "hsl(330, 85%, 42%)") : "hsl(150, 20%, 14%)")
                   : isBipartite ? bipartiteFill : isBFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isDFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isCurrent ? "hsl(145, 60%, 45%)" : isVisited ? "hsl(150, 30%, 20%)" : "hsl(150, 20%, 12%)"}
-                stroke={isPageRank ? (isCurrent ? "hsl(330, 85%, 60%)" : "hsl(0, 0%, 45%)") : isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
-                strokeWidth={isVisited || isPageRank ? 2 : 1}
+                stroke={isPageRank ? (isCurrent ? "hsl(330, 85%, 60%)" : "hsl(0, 0%, 45%)") : isTarjan ? (tarjanVisited ? "hsl(330, 85%, 65%)" : "hsl(0, 0%, 45%)") : isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
+                strokeWidth={(isVisited || isPageRank || (isTarjan && tarjanVisited)) ? 2 : 1}
               />
               <text x={n.x} y={n.y + 4}
-                fill={isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
+                fill={isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
                 fontSize="11" textAnchor="middle" fontWeight={600}
               >
                 {label || n.id}
@@ -1151,6 +1248,124 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           );
         })}
       </svg>
+      {isTarjan && graph.nodes.length > 0 && (
+        <>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">Disc (Discovery Time)</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3">
+              <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                {graph.nodes.map((n) => (
+                  <div key={`tj-d-i-${n.id}`} className="w-8 text-center text-[10px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1 flex-wrap">
+                {graph.nodes.map((n) => {
+                  const d = tarjanDisc[n.id];
+                  const hi = currentNode === n.id;
+                  return (
+                    <div
+                      key={`tj-d-v-${n.id}`}
+                      className="w-8 h-8 flex items-center justify-center text-xs font-mono border transition-colors"
+                      style={{
+                        background: hi ? "hsl(330, 85%, 48%)" : "hsl(150, 10%, 22%)",
+                        borderColor: hi ? "hsl(330, 85%, 60%)" : "hsl(150, 10%, 30%)",
+                        color: "hsl(150, 20%, 92%)",
+                      }}
+                    >
+                      {d !== undefined && d >= 0 ? d : "—"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">Low (Lowest Link)</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3">
+              <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                {graph.nodes.map((n) => (
+                  <div key={`tj-l-i-${n.id}`} className="w-8 text-center text-[10px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1 flex-wrap">
+                {graph.nodes.map((n) => {
+                  const lo = tarjanLow[n.id];
+                  const hi = currentNode === n.id;
+                  return (
+                    <div
+                      key={`tj-l-v-${n.id}`}
+                      className="w-8 h-8 flex items-center justify-center text-xs font-mono border transition-colors"
+                      style={{
+                        background: hi ? "hsl(330, 85%, 48%)" : "hsl(150, 10%, 22%)",
+                        borderColor: hi ? "hsl(330, 85%, 60%)" : "hsl(150, 10%, 30%)",
+                        color: "hsl(150, 20%, 92%)",
+                      }}
+                    >
+                      {lo !== undefined && lo >= 0 ? lo : "—"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">stackMember</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3">
+              <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                {graph.nodes.map((n) => (
+                  <div key={`tj-sm-i-${n.id}`} className="w-8 text-center text-[10px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1 flex-wrap">
+                {graph.nodes.map((n) => {
+                  const sm = tarjanOnStack[n.id];
+                  const on = sm === true;
+                  const hi = currentNode === n.id;
+                  return (
+                    <div
+                      key={`tj-sm-v-${n.id}`}
+                      className="w-8 h-8 flex items-center justify-center text-xs font-mono border transition-colors"
+                      style={{
+                        background: on ? "hsl(330, 85%, 42%)" : hi ? "hsl(330, 85%, 48%)" : "hsl(150, 10%, 22%)",
+                        borderColor: on ? "hsl(330, 85%, 60%)" : "hsl(150, 10%, 30%)",
+                        color: "hsl(150, 20%, 92%)",
+                      }}
+                    >
+                      {on ? "T" : "F"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">st (Stack)</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3 min-h-[4rem]">
+              {tarjanStack.length > 0 ? (
+                <>
+                  <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                    {tarjanStack.map((_, si) => (
+                      <div key={`tj-st-i-${si}`} className="w-8 text-center text-[10px] text-muted-foreground">{si}</div>
+                    ))}
+                  </div>
+                  <div className="flex justify-center gap-1 flex-wrap">
+                    {tarjanStack.map((nid, si) => (
+                      <div
+                        key={`tj-st-v-${si}-${nid}`}
+                        className="w-8 h-8 flex items-center justify-center text-xs font-mono border border-[hsl(330,85%,58%)] bg-[hsl(330,85%,42%)] text-[hsl(150,20%,92%)]"
+                      >
+                        {nid}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs font-mono text-muted-foreground text-center py-2">(empty)</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
       {isPageRank && graph.nodes.length > 0 && (
         <>
           <div className="w-full mt-4 max-w-[24rem]">
@@ -1232,14 +1447,16 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           </div>
         </>
       )}
-      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank) && (
+      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan) && (
         <div className="w-full mt-6 border-t border-border/20 pt-3 max-w-[24rem]">
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
             {logs.length > 0 ? logs.slice(-8).map((entry, index) => (
               <div key={`${index}-${entry}`}>{entry}</div>
             )) : (
-              <div>{isPageRank ? "Press play to run PageRank." : "Press play to start the search."}</div>
+              <div>
+                {isPageRank ? "Press play to run PageRank." : isTarjan ? "Press play to run Tarjan SCC." : "Press play to start the search."}
+              </div>
             )}
           </div>
         </div>
