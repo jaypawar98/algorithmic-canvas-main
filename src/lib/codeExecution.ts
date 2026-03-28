@@ -323,6 +323,29 @@ const markerSnippets: Record<string, Partial<Record<CodeLang, Record<string, str
       "return-sorted": "}",
     },
   },
+  "Insertion Sort": {
+    javascript: {
+      "init-length": "const a = [...arr];",
+      "pick-key": "const key = a[i]; let j = i-1;",
+      "shift-elem": "a[j+1] = a[j]; j--;",
+      "insert-key": "a[j+1] = key;",
+      "return-sorted": "return a;",
+    },
+    java: {
+      "init-length": "for (int i = 1; i < arr.length; i++) {",
+      "pick-key": "int key = arr[i], j = i-1;",
+      "shift-elem": "arr[j+1] = arr[j]; j--;",
+      "insert-key": "arr[j+1] = key;",
+      "return-sorted": "}",
+    },
+    c: {
+      "init-length": "for (int i = 1; i < n; i++) {",
+      "pick-key": "int key = arr[i], j = i-1;",
+      "shift-elem": "arr[j+1] = arr[j]; j--;",
+      "insert-key": "arr[j+1] = key;",
+      "return-sorted": "}",
+    },
+  },
   "Bridge Finding": {
     javascript: {
       "visit-node": "disc[u] = low[u] = timer++;",
@@ -573,6 +596,13 @@ const markerMessages: Record<string, Record<string, string>> = {
     "extract-max": "Moving the heap max to the next position in the sorted suffix.",
     "heapify-down": "Restoring the heap property on the smaller prefix.",
     "return-sorted": "Heapsort is complete.",
+  },
+  "Insertion Sort": {
+    "init-length": "Recording the initial array before inserting elements.",
+    "pick-key": "Taking the next element to insert into the sorted prefix.",
+    "shift-elem": "Shifting a larger element right to make room for the key.",
+    "insert-key": "Writing the key into its final position for this pass.",
+    "return-sorted": "Insertion Sort is complete.",
   },
   "Bridge Finding": {
     "visit-node": "Visiting a node and assigning its discovery and low-link values.",

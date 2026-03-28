@@ -24,6 +24,7 @@ const bubbleDemoArray = [8, 3, 1, 1, 4, 8, 2, 3, 8, 3, 4, 3, 4, 8, 3];
 const combDemoArray = [3, 4, 4, 1, 4, 6, 5, 8, 6, 8, 7, 9, 9, 8, 8];
 const cycleDemoArray = [7, 1, 9, 4, 6, 6, 9, 5, 8, 3, 6, 6, 4, 4, 9];
 const heapsortDemoArray = [4, 3, 8, 7, 4, 1, 4, 6, 7, 8];
+const insertionDemoArray = [9, 5, 1, 7, 3, 3, 8, 5, 4, 9, 9, 9, 8, 5, 2];
 
 function generateArray(len = 20) {
   return Array.from({ length: len }, () => Math.floor(Math.random() * 90) + 10);
@@ -108,19 +109,52 @@ function insertionSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
   const n = a.length;
+  const originalStr = input.join(", ");
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: [0],
+    codeMarker: "init-length",
+    log: `original array - [${originalStr}]`,
+  });
   for (let i = 1; i < n; i++) {
     const key = a[i];
     let j = i - 1;
-    steps.push({ arr: [...a], comparing: [i], sorted: Array.from({ length: i }, (_, k) => k) });
+    steps.push({
+      arr: [...a],
+      comparing: [i],
+      sorted: Array.from({ length: i }, (_, k) => k),
+      codeMarker: "pick-key",
+      log: `insert ${key}`,
+    });
     while (j >= 0 && a[j] > key) {
+      const v = a[j];
       a[j + 1] = a[j];
-      steps.push({ arr: [...a], comparing: [j, j + 1], sorted: [] });
+      steps.push({
+        arr: [...a],
+        comparing: [j, j + 1],
+        sorted: Array.from({ length: i }, (_, k) => k),
+        codeMarker: "shift-elem",
+        log: `Shift ${v} from index ${j} to index ${j + 1}.`,
+      });
       j--;
     }
     a[j + 1] = key;
-    steps.push({ arr: [...a], comparing: [j + 1], sorted: Array.from({ length: i + 1 }, (_, k) => k) });
+    steps.push({
+      arr: [...a],
+      comparing: [j + 1],
+      sorted: Array.from({ length: i + 1 }, (_, k) => k),
+      codeMarker: "insert-key",
+      log: `Place key ${key} at index ${j + 1}.`,
+    });
   }
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: n }, (_, i) => i) });
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+    codeMarker: "return-sorted",
+    log: "Array is fully sorted.",
+  });
   return steps;
 }
 
@@ -811,6 +845,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   const isCombSort = algorithmName === "Comb Sort";
   const isCycleSort = algorithmName === "Cycle Sort";
   const isHeapsort = algorithmName === "Heapsort";
+  const isInsertionSort = algorithmName === "Insertion Sort";
 
   const reset = useCallback(() => {
     const newArr = isBubbleSort
@@ -821,7 +856,9 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
           ? [...cycleDemoArray]
           : isHeapsort
             ? [...heapsortDemoArray]
-        : generateArray();
+            : isInsertionSort
+              ? [...insertionDemoArray]
+              : generateArray();
     setArr(newArr);
     setComparing([]);
     setSorted(new Set());
@@ -833,7 +870,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
     stepsRef.current = getSteps(algorithmName, newArr);
     onCodeMarkerChange?.(stepsRef.current[0]?.codeMarker ?? null);
     onStep?.(0, stepsRef.current.length);
-  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, onCodeMarkerChange, onStep]);
+  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, onCodeMarkerChange, onStep]);
 
   useEffect(() => {
     reset();
@@ -1026,6 +1063,86 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
             <div>{log || "Press play to start Bubble Sort."}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  if (isInsertionSort) {
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">ChartTracer</div>
+          <div className="flex-1 border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="h-full flex items-end justify-center gap-3">
+              {arr.map((val, i) => {
+                const isComparing = comparing.includes(i);
+                const isSorted = sorted.has(i);
+                return (
+                  <div key={i} className="flex-1 max-w-10 flex flex-col items-center justify-end gap-2 h-full">
+                    <div
+                      className="w-full rounded-t-sm transition-all"
+                      style={{
+                        height: `${(val / maxVal) * 78}%`,
+                        background: isComparing
+                          ? "hsl(224, 85%, 58%)"
+                          : isSorted
+                            ? "hsl(145, 60%, 45%)"
+                            : "hsl(0, 0%, 72%)",
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="flex justify-center gap-1 mb-2">
+              {arr.map((_, i) => (
+                <div key={`idx-${i}`} className="w-7 text-center text-[10px] text-muted-foreground">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-1">
+              {arr.map((val, i) => (
+                <div
+                  key={`ins-val-${i}`}
+                  className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
+                  style={{
+                    background: comparing.includes(i)
+                      ? "hsl(224, 85%, 58%)"
+                      : sorted.has(i)
+                        ? "hsl(145, 60%, 45%)"
+                        : "hsl(150, 10%, 22%)",
+                    borderColor: comparing.includes(i) ? "hsl(224, 85%, 68%)" : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 min-h-28">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
+            <div>{log || "Press play to start Insertion Sort."}</div>
           </div>
         </div>
 
