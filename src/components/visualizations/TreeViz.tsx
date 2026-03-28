@@ -191,48 +191,100 @@ function buildTraversalSteps(): TreeStep[] {
 }
 
 function buildLCASteps(): TreeStep[] {
-  const values = [40, 20, 60, 10, 30, 50, 70, 5, 15, 25, 35];
+  const values = [5, 3, 8, 1, 4, 6, 10, 0, 2, 7, 9];
   const nodes: TNode[] = values.map((v, i) => ({ id: i, value: v, x: 0, y: 0, left: null, right: null }));
-  for (let i = 0; i < nodes.length; i++) {
-    const l = 2 * i + 1, r = 2 * i + 2;
-    if (l < nodes.length) nodes[i].left = l;
-    if (r < nodes.length) nodes[i].right = r;
-  }
-  layoutTree(nodes, 0, 200, 25, 90);
+  nodes[0].left = 1;
+  nodes[0].right = 2;
+  nodes[1].left = 3;
+  nodes[1].right = 4;
+  nodes[2].left = 5;
+  nodes[2].right = 6;
+  nodes[3].left = 7;
+  nodes[3].right = 8;
+  nodes[6].left = 9;
+  nodes[6].right = 10;
+  layoutTree(nodes, 0, 200, 30, 90);
 
+  const pIdx = 7;
+  const qIdx = 8;
   const steps: TreeStep[] = [];
-  const p = 7, q = 9; // nodes for 5 and 25
+  const logs: string[] = [];
 
-  // Find path to p
-  function findPath(root: number | null, target: number, path: number[]): boolean {
-    if (root === null) return false;
-    path.push(root);
-    if (root === target) return true;
-    if (findPath(nodes[root].left, target, path) || findPath(nodes[root].right, target, path)) return true;
-    path.pop();
-    return false;
+  const snap = (highlighted: number[], found: number | undefined, label: string, codeMarker: string) => {
+    steps.push({
+      nodes: nodes.map(n => ({ ...n })),
+      highlighted,
+      found,
+      label,
+      codeMarker,
+      logs: [...logs],
+    });
+  };
+
+  function pathFromRootTo(target: number): number[] {
+    const out: number[] = [];
+    function walk(r: number | null, acc: number[]): boolean {
+      if (r === null) return false;
+      const next = [...acc, r];
+      if (r === target) {
+        out.push(...next);
+        return true;
+      }
+      if (walk(nodes[r].left, next)) return true;
+      if (walk(nodes[r].right, next)) return true;
+      return false;
+    }
+    walk(0, []);
+    return out;
   }
 
-  const pathP: number[] = [];
-  findPath(0, p, pathP);
-  for (let i = 0; i <= pathP.length; i++) {
-    steps.push({ nodes: nodes.map(n => ({ ...n })), highlighted: pathP.slice(0, i), label: `Path to ${values[p]}` });
+  function lca(parentIdx: number | null, rootIdx: number | null, pathToParent: number[]): number | null {
+    const pStr = parentIdx === null ? "null" : String(values[parentIdx]);
+    const rStr = rootIdx === null ? "null" : String(values[rootIdx]);
+    logs.push(`Beginning new iteration of lcaBT() with parent: ${pStr}, current root: ${rStr}`);
+
+    if (rootIdx === null) {
+      logs.push("Reached end of path & target node(s) not found");
+      snap(pathToParent, undefined, "null", "check-null");
+      return null;
+    }
+
+    const pathHere = [...pathToParent, rootIdx];
+    snap(pathHere, undefined, `Preorder visit ${values[rootIdx]}`, "visit-node");
+
+    if (rootIdx === pIdx || rootIdx === qIdx) {
+      logs.push(`Current root ${values[rootIdx]} matches target p or q`);
+      snap(pathHere, undefined, `Hit target ${values[rootIdx]}`, "check-target");
+      return rootIdx;
+    }
+
+    const left = lca(rootIdx, nodes[rootIdx].left, pathHere);
+    const right = lca(rootIdx, nodes[rootIdx].right, pathHere);
+
+    if (left !== null && right !== null) {
+      logs.push(`Found targets in both subtrees of ${values[rootIdx]}; LCA = ${values[rootIdx]}`);
+      snap(pathHere, rootIdx, `LCA = ${values[rootIdx]}`, "found-lca");
+      return rootIdx;
+    }
+
+    const up = left ?? right;
+    if (up !== null) {
+      logs.push(`Bubble up from ${values[rootIdx]} with descendant hit ${values[up]}`);
+    }
+    snap(pathHere, up ?? undefined, up ? `Return ${values[up]}` : "No target in subtree", "bubble-up");
+    return up;
   }
 
-  const pathQ: number[] = [];
-  findPath(0, q, pathQ);
-  for (let i = 0; i <= pathQ.length; i++) {
-    steps.push({ nodes: nodes.map(n => ({ ...n })), highlighted: [...pathP, ...pathQ.slice(0, i)], label: `Path to ${values[q]}` });
+  logs.push(`Find LCA of values ${values[pIdx]} (index ${pIdx}) and ${values[qIdx]} (index ${qIdx})`);
+  snap([], undefined, "Start", "init");
+  const result = lca(null, 0, []);
+  if (result !== null) {
+    logs.push(`Done. Lowest common ancestor has value ${values[result]}`);
+    snap(pathFromRootTo(result), result, `LCA = ${values[result]}`, "return-result");
+  } else {
+    logs.push("No common ancestor found.");
+    snap([], undefined, "Done", "return-result");
   }
-
-  // Find LCA
-  let lca = 0;
-  for (let i = 0; i < Math.min(pathP.length, pathQ.length); i++) {
-    if (pathP[i] === pathQ[i]) lca = pathP[i];
-    else break;
-  }
-  steps.push({ nodes: nodes.map(n => ({ ...n })), highlighted: [...pathP, ...pathQ], found: lca, label: `LCA = ${values[lca]}` });
-
   return steps;
 }
 
@@ -337,6 +389,7 @@ export function TreeViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
   const highlightSet = new Set(highlighted);
   const isBST = algorithmName.includes("Binary Search Tree");
   const isTraversal = algorithmName.includes("Binary Tree Traversal");
+  const isLCA = algorithmName.includes("Lowest Common");
 
   if (isBST) {
     return (
@@ -496,6 +549,92 @@ export function TreeViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
         </div>
 
         <button onClick={reset} className="text-[10px] text-muted-foreground hover:text-primary transition-colors mt-2 self-center">Reset</button>
+      </div>
+    );
+  }
+
+  if (isLCA) {
+    return (
+      <div className="w-full h-full flex flex-col justify-start pt-2">
+        <div className="text-[10px] text-muted-foreground mb-2">Traversal Pre-order</div>
+        <div className="flex-1 min-h-0 flex items-start justify-center">
+          <svg viewBox="0 0 400 320" className="w-full max-w-[24rem] h-[14rem]">
+            {nodes.map(n => {
+              const children = [n.left, n.right].filter((c): c is number => c !== null && c < nodes.length);
+              return children.map(c => (
+                <line
+                  key={`${n.id}-${c}`}
+                  x1={n.x}
+                  y1={n.y}
+                  x2={nodes[c].x}
+                  y2={nodes[c].y}
+                  stroke={highlightSet.has(n.id) && highlightSet.has(c) ? "hsl(330, 85%, 48%)" : "hsl(150, 15%, 25%)"}
+                  strokeWidth={highlightSet.has(n.id) && highlightSet.has(c) ? 2.5 : 1.5}
+                  opacity={1}
+                />
+              ));
+            })}
+            {nodes.map(n => {
+              const isHighlighted = highlightSet.has(n.id);
+              const isFound = found === n.id;
+              return (
+                <g key={n.id}>
+                  {isFound && (
+                    <circle
+                      cx={n.x}
+                      cy={n.y}
+                      r={22}
+                      fill="none"
+                      stroke="hsl(45, 90%, 55%)"
+                      strokeWidth={2.5}
+                      opacity={0.65}
+                    />
+                  )}
+                  <circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={16}
+                    fill={
+                      isFound ? "hsl(45, 90%, 55%)" : isHighlighted ? "hsl(330, 85%, 48%)" : "hsl(150, 10%, 28%)"
+                    }
+                    stroke="hsl(0, 0%, 70%)"
+                    strokeWidth={isFound ? 2 : 1}
+                  />
+                  <text
+                    x={n.x}
+                    y={n.y + 4}
+                    fill="hsl(150, 20%, 92%)"
+                    fontSize="11"
+                    textAnchor="middle"
+                    fontWeight={600}
+                  >
+                    {n.value}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <div className="w-full mt-6 border-t border-border/20 pt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
+            {(logs ?? []).length > 0 ? (
+              (logs ?? []).slice(-8).map((entry, index) => (
+                <div key={`${index}-${entry.slice(0, 32)}`}>{entry}</div>
+              ))
+            ) : (
+              <div>Press play to start the search.</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="text-[10px] text-muted-foreground hover:text-primary transition-colors mt-2 self-center"
+        >
+          Reset
+        </button>
       </div>
     );
   }

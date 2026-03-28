@@ -460,6 +460,35 @@ const markerSnippets: Record<string, Partial<Record<CodeLang, Record<string, str
       "traverse-right": "inorder(root->right);",
     },
   },
+  "Lowest Common Ancestor": {
+    javascript: {
+      "init": "function lca(root, p, q) {",
+      "check-null": "if (!root || root === p || root === q) return root;",
+      "visit-node": "const left = lca(root.left, p, q);",
+      "check-target": "if (!root || root === p || root === q) return root;",
+      "found-lca": "if (left && right) return root;",
+      "bubble-up": "return left || right;",
+      "return-result": "}",
+    },
+    java: {
+      "init": "TreeNode lca(TreeNode root, TreeNode p, TreeNode q) {",
+      "check-null": "if (root == null || root == p || root == q) return root;",
+      "visit-node": "TreeNode left = lca(root.left, p, q);",
+      "check-target": "if (root == null || root == p || root == q) return root;",
+      "found-lca": "if (left != null && right != null) return root;",
+      "bubble-up": "return left != null ? left : right;",
+      "return-result": "}",
+    },
+    c: {
+      "init": "Node* lca(Node* root, Node* p, Node* q) {",
+      "check-null": "if (!root || root == p || root == q) return root;",
+      "visit-node": "Node* left = lca(root->left, p, q);",
+      "check-target": "if (!root || root == p || root == q) return root;",
+      "found-lca": "if (left && right) return root;",
+      "bubble-up": "return left ? left : right;",
+      "return-result": "}",
+    },
+  },
   "Bipartiteness Test": {
     javascript: {
       "init-colors": "const color = Array(V).fill(-1);",
@@ -642,6 +671,15 @@ const markerMessages: Record<string, Record<string, string>> = {
     "traverse-left": "Traversing into the left subtree.",
     "visit-node": "Visiting the current node and adding it to the traversal output.",
     "traverse-right": "Traversing into the right subtree.",
+  },
+  "Lowest Common Ancestor": {
+    "init": "Starting the recursive LCA walk on the binary tree.",
+    "check-null": "At a null child or a direct hit on p or q; unwinding this branch.",
+    "visit-node": "Preorder visit: recurse into the left subtree next.",
+    "check-target": "The current node is one of the two target nodes.",
+    "found-lca": "Both subtrees reported a target; this node is the lowest common ancestor.",
+    "bubble-up": "Propagating a single subtree result toward the caller.",
+    "return-result": "Traversal finished; highlighting the LCA path.",
   },
   "Bipartiteness Test": {
     "init-colors": "Initializing all graph nodes as uncolored.",
