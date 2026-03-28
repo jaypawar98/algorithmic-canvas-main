@@ -489,6 +489,23 @@ const markerSnippets: Record<string, Partial<Record<CodeLang, Record<string, str
       "return-result": "}",
     },
   },
+  "PageRank": {
+    javascript: {
+      "init-pr": "let pr = Array(V).fill(1/V);",
+      "iterate-pr": "for (let iter = 0; iter < iterations; iter++) {",
+      "complete-pr": "return pr;",
+    },
+    java: {
+      "init-pr": "Arrays.fill(pr, 1.0/V);",
+      "iterate-pr": "for (int iter = 0; iter < iterations; iter++) {",
+      "complete-pr": "return pr;",
+    },
+    c: {
+      "init-pr": "for (int i = 0; i < V; i++) pr[i] = 1.0/V;",
+      "iterate-pr": "for (int it = 0; it < iter; it++) {",
+      "complete-pr": "}",
+    },
+  },
   "Bipartiteness Test": {
     javascript: {
       "init-colors": "const color = Array(V).fill(-1);",
@@ -680,6 +697,11 @@ const markerMessages: Record<string, Record<string, string>> = {
     "found-lca": "Both subtrees reported a target; this node is the lowest common ancestor.",
     "bubble-up": "Propagating a single subtree result toward the caller.",
     "return-result": "Traversal finished; highlighting the LCA path.",
+  },
+  "PageRank": {
+    "init-pr": "Computing out-degrees, incoming matrix, and uniform initial ranks.",
+    "iterate-pr": "One PageRank iteration: spreading rank along directed edges.",
+    "complete-pr": "PageRank iterations finished; ranks have converged for this demo.",
   },
   "Bipartiteness Test": {
     "init-colors": "Initializing all graph nodes as uncolored.",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 interface Props {
   isPlaying: boolean;
@@ -18,6 +18,9 @@ interface GStep {
   codeMarker?: string | null;
   logs?: string[];
   colors?: number[];
+  pageRanks?: number[];
+  outDegrees?: number[];
+  incomingMatrix?: number[][];
 }
 
 function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
@@ -112,6 +115,28 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
     return { nodes, edges };
   }
 
+  if (algorithmName.includes("PageRank")) {
+    const nodes: Node[] = [
+      { id: 0, x: 200, y: 48 },
+      { id: 1, x: 292, y: 118 },
+      { id: 2, x: 260, y: 228 },
+      { id: 3, x: 140, y: 228 },
+      { id: 4, x: 108, y: 118 },
+    ];
+    const edges: Edge[] = [
+      { from: 0, to: 1, weight: 1 },
+      { from: 0, to: 2, weight: 1 },
+      { from: 0, to: 3, weight: 1 },
+      { from: 1, to: 2, weight: 1 },
+      { from: 2, to: 3, weight: 1 },
+      { from: 2, to: 4, weight: 1 },
+      { from: 3, to: 0, weight: 1 },
+      { from: 3, to: 4, weight: 1 },
+      { from: 4, to: 0, weight: 1 },
+    ];
+    return { nodes, edges };
+  }
+
   if (algorithmName.includes("Topological")) {
     const nodes: Node[] = [
       { id: 0, x: 200, y: 45 },
@@ -150,6 +175,10 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
 }
 
 function edgeKey(a: number, b: number) { return `${Math.min(a, b)}-${Math.max(a, b)}`; }
+
+function directedEdgeKey(from: number, to: number) {
+  return `${from}-${to}`;
+}
 
 function bfsSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const adj: number[][] = Array.from({ length: nodes.length }, () => []);
@@ -821,22 +850,60 @@ function bipartitenessSteps(nodes: Node[], edges: Edge[]): GStep[] {
 function pageRankSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const n = nodes.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
-  edges.forEach(e => { adj[e.from].push(e.to); adj[e.to].push(e.from); });
+  edges.forEach(e => { adj[e.from].push(e.to); });
+  const outDeg = adj.map((a) => a.length);
+  const incomingMatrix: number[][] = Array.from({ length: n }, () => Array(n).fill(-1));
+  for (let i = 0; i < n; i++) {
+    for (const j of adj[i]) incomingMatrix[i][j] = i;
+  }
   const d = 0.85;
   let pr = Array(n).fill(1 / n);
   const steps: GStep[] = [];
-  const ae = edges.map(e => edgeKey(e.from, e.to));
+  const allDirected = edges.map((e) => directedEdgeKey(e.from, e.to));
 
-  for (let iter = 0; iter < 8; iter++) {
+  const snapshot = (
+    current: number,
+    extraLogs: string[],
+    codeMarker: string,
+  ): void => {
+    steps.push({
+      visited: Array.from({ length: n }, (_, i) => i),
+      current,
+      activeEdges: allDirected,
+      codeMarker,
+      pageRanks: [...pr],
+      outDegrees: [...outDeg],
+      incomingMatrix: incomingMatrix.map((row) => [...row]),
+      logs: extraLogs,
+    });
+  };
+
+  snapshot(0, [
+    "Calculate Outgoing Edge Count for each Node.",
+    `Outgoing counts: [${outDeg.join(", ")}].`,
+    "Determine incoming nodes for each node (matrix: row i → column j shows source i if link i→j, else -1).",
+    `Initialized all Page ranks to ${(1 / n).toFixed(4)} (uniform 1/N).`,
+    "Begin execution of PageRank.",
+    "PR(X) = (1 - d)/N + d × Σ(PR(I) / Out(I)) over pages I that link to X.  (d = 0.85)",
+  ], "init-pr");
+
+  const iters = 12;
+  for (let iter = 0; iter < iters; iter++) {
     const newPR = Array(n).fill((1 - d) / n);
     for (let u = 0; u < n; u++) {
-      const outDeg = adj[u].length;
-      for (const v of adj[u]) newPR[v] += d * pr[u] / outDeg;
+      const od = Math.max(1, outDeg[u]);
+      for (const v of adj[u]) newPR[v] += (d * pr[u]) / od;
     }
     pr = newPR;
-    const labels: Record<number, string> = {};
-    for (let i = 0; i < n; i++) labels[i] = pr[i].toFixed(2);
-    steps.push({ visited: Array.from({ length: n }, (_, i) => i), current: iter % n, activeEdges: ae, nodeLabels: labels });
+    const maxIdx = pr.reduce((bi, v, i) => (v > pr[bi] ? i : bi), 0);
+    snapshot(
+      maxIdx,
+      [
+        `Iteration ${iter + 1} / ${iters}: redistribute rank along outgoing links.`,
+        `Highest rank: node ${maxIdx} → ${pr[maxIdx].toFixed(4)}.`,
+      ],
+      iter === iters - 1 ? "complete-pr" : "iterate-pr",
+    );
   }
   return steps;
 }
@@ -920,6 +987,9 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const [distanceLabels, setDistanceLabels] = useState<Record<number, string>>({});
   const [logs, setLogs] = useState<string[]>([]);
   const [colors, setColors] = useState<number[]>([]);
+  const [pageRanks, setPageRanks] = useState<number[]>([]);
+  const [outDegrees, setOutDegrees] = useState<number[]>([]);
+  const [incomingMatrix, setIncomingMatrix] = useState<number[][]>([]);
   const stepRef = useRef(0);
   const stepsRef = useRef<GStep[]>([]);
   const intervalRef = useRef<number | null>(null);
@@ -945,6 +1015,9 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         setDistanceLabels(s.distanceLabels ?? {});
         setLogs(s.logs ?? []);
         setColors(s.colors ?? []);
+        setPageRanks(s.pageRanks ?? []);
+        setOutDegrees(s.outDegrees ?? []);
+        setIncomingMatrix(s.incomingMatrix ?? []);
         onCodeMarkerChange?.(s.codeMarker ?? null);
         stepRef.current++;
       }, Math.max(100, 800 - speed * 70));
@@ -962,6 +1035,10 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
     setDistanceLabels(stepsRef.current[0]?.distanceLabels ?? {});
     setLogs(stepsRef.current[0]?.logs ?? []);
     setColors(stepsRef.current[0]?.colors ?? []);
+    const z = stepsRef.current[0];
+    setPageRanks(z?.pageRanks ?? []);
+    setOutDegrees(z?.outDegrees ?? []);
+    setIncomingMatrix(z?.incomingMatrix ?? []);
     onCodeMarkerChange?.(stepsRef.current[0]?.codeMarker ?? null);
     stepRef.current = 0;
   };
@@ -975,11 +1052,15 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const isTopological = algorithmName.includes("Topological");
   const isBipartite = algorithmName.includes("Bipartite");
   const isBridgeFinding = algorithmName.includes("Bridge");
+  const isPageRank = algorithmName.includes("PageRank");
 
   return (
-    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding) ? "justify-start pt-2" : "justify-center"}`}>
-      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : "w-full max-w-md"}>
-        {isTopological && (
+    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank) ? "justify-start pt-2" : "justify-center"}`}>
+      {isPageRank && (
+        <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">Web Page inter-connections</div>
+      )}
+      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
+        {(isTopological || isPageRank) && (
           <defs>
             <marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(0, 0%, 72%)" />
@@ -989,7 +1070,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.edges.map((e) => {
           const from = graph.nodes[e.from];
           const to = graph.nodes[e.to];
-          const ek = edgeKey(e.from, e.to);
+          const ek = isPageRank ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
           const active = activeEdges.has(ek);
           const edgeStroke = isBipartite
             ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
@@ -997,6 +1078,8 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
               ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
             : isDFS
               ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
+              : isPageRank
+                ? active ? "hsl(0, 0%, 78%)" : "hsl(0, 0%, 52%)"
             : active ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 25%)";
           return (
             <g key={ek}>
@@ -1004,8 +1087,8 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 x1={from.x} y1={from.y} x2={to.x} y2={to.y}
                 stroke={edgeStroke}
                 strokeWidth={active ? 3 : 1.5}
-                opacity={(isBipartite || isBFS || isDFS) ? 1 : active ? 1 : 0.5}
-                markerEnd={isTopological ? "url(#graph-arrow)" : undefined}
+                opacity={(isBipartite || isBFS || isDFS || isPageRank) ? 1 : active ? 1 : 0.5}
+                markerEnd={isTopological || isPageRank ? "url(#graph-arrow)" : undefined}
               />
               {showWeights && (
                 <text
@@ -1021,7 +1104,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.nodes.map((n) => {
           const isVisited = visited.has(n.id);
           const isCurrent = currentNode === n.id;
-          const label = nodeLabels[n.id];
+          const label = isPageRank ? String(n.id) : nodeLabels[n.id];
           const colorValue = colors[n.id];
           const bipartiteFill = colorValue === 0
             ? "hsl(330, 85%, 48%)"
@@ -1030,18 +1113,24 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
               : "hsl(150, 20%, 12%)";
           return (
             <g key={n.id}>
-              {isCurrent && !isBipartite && !isBFS && !isDFS && (
+              {isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && (
                 <circle cx={n.x} cy={n.y} r={22} fill="none"
                   stroke="hsl(145, 60%, 45%)" strokeWidth={2} opacity={0.4} />
               )}
+              {isCurrent && isPageRank && (
+                <circle cx={n.x} cy={n.y} r={22} fill="none"
+                  stroke="hsl(330, 85%, 58%)" strokeWidth={2} opacity={0.45} />
+              )}
               <circle
                 cx={n.x} cy={n.y} r={16}
-                fill={isBipartite ? bipartiteFill : isBFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isDFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isCurrent ? "hsl(145, 60%, 45%)" : isVisited ? "hsl(150, 30%, 20%)" : "hsl(150, 20%, 12%)"}
-                stroke={isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
-                strokeWidth={isVisited ? 2 : 1}
+                fill={isPageRank
+                  ? (isCurrent ? "hsl(330, 85%, 42%)" : "hsl(150, 20%, 14%)")
+                  : isBipartite ? bipartiteFill : isBFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isDFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isCurrent ? "hsl(145, 60%, 45%)" : isVisited ? "hsl(150, 30%, 20%)" : "hsl(150, 20%, 12%)"}
+                stroke={isPageRank ? (isCurrent ? "hsl(330, 85%, 60%)" : "hsl(0, 0%, 45%)") : isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
+                strokeWidth={isVisited || isPageRank ? 2 : 1}
               />
               <text x={n.x} y={n.y + 4}
-                fill={isCurrent && !isBipartite && !isBFS && !isDFS ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
+                fill={isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
                 fontSize="11" textAnchor="middle" fontWeight={600}
               >
                 {label || n.id}
@@ -1062,14 +1151,95 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           );
         })}
       </svg>
-      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding) && (
-        <div className="w-full mt-6 border-t border-border/20 pt-3">
+      {isPageRank && graph.nodes.length > 0 && (
+        <>
+          <div className="w-full mt-4 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">Web Page Ranks</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3">
+              <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                {graph.nodes.map((n) => (
+                  <div key={`pr-idx-${n.id}`} className="w-11 text-center text-[10px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1 flex-wrap">
+                {graph.nodes.map((n) => {
+                  const r = pageRanks[n.id];
+                  const show = typeof r === "number";
+                  const isHi = currentNode === n.id;
+                  return (
+                    <div
+                      key={`pr-val-${n.id}`}
+                      className="w-11 h-8 flex items-center justify-center text-[11px] font-mono border transition-colors"
+                      style={{
+                        background: isHi ? "hsl(330, 85%, 48%)" : "hsl(150, 10%, 22%)",
+                        borderColor: isHi ? "hsl(330, 85%, 60%)" : "hsl(150, 10%, 30%)",
+                        color: "hsl(150, 20%, 92%)",
+                      }}
+                    >
+                      {show ? r.toFixed(3) : "—"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">Outgoing Edge Counts</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3">
+              <div className="flex justify-center gap-1 mb-2 flex-wrap">
+                {graph.nodes.map((n) => (
+                  <div key={`od-idx-${n.id}`} className="w-11 text-center text-[10px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1 flex-wrap">
+                {graph.nodes.map((n) => {
+                  const od = outDegrees[n.id];
+                  return (
+                    <div
+                      key={`od-val-${n.id}`}
+                      className="w-11 h-8 flex items-center justify-center text-xs font-mono border border-[hsl(150,10%,30%)] bg-[hsl(150,10%,22%)] text-[hsl(150,20%,92%)]"
+                    >
+                      {od !== undefined ? od : "—"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="w-full mt-3 max-w-[24rem]">
+            <div className="text-[10px] text-muted-foreground mb-2">Incoming Nodes</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+              <div className="flex gap-0.5 mb-1 items-center">
+                <div className="w-7 shrink-0 text-[9px] text-muted-foreground" />
+                {graph.nodes.map((n) => (
+                  <div key={`in-h-${n.id}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground">{n.id}</div>
+                ))}
+              </div>
+              {incomingMatrix.map((row, i) => (
+                <div key={`in-row-${i}`} className="flex gap-0.5 items-center mb-0.5">
+                  <div className="w-7 shrink-0 text-[9px] text-muted-foreground text-right pr-0.5">{i}</div>
+                  {row.map((cell, j) => (
+                    <div
+                      key={`in-${i}-${j}`}
+                      className="w-8 h-7 shrink-0 flex items-center justify-center text-[10px] font-mono border border-[hsl(150,10%,28%)] bg-[hsl(150,10%,18%)] text-[hsl(150,20%,88%)]"
+                    >
+                      {cell < 0 ? "-1" : cell}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank) && (
+        <div className="w-full mt-6 border-t border-border/20 pt-3 max-w-[24rem]">
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
             {logs.length > 0 ? logs.slice(-8).map((entry, index) => (
               <div key={`${index}-${entry}`}>{entry}</div>
             )) : (
-              <div>Press play to start the search.</div>
+              <div>{isPageRank ? "Press play to run PageRank." : "Press play to start the search."}</div>
             )}
           </div>
         </div>
