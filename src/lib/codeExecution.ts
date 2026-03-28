@@ -346,6 +346,29 @@ const markerSnippets: Record<string, Partial<Record<CodeLang, Record<string, str
       "return-sorted": "}",
     },
   },
+  "Pancake Sort": {
+    javascript: {
+      "init-length": "const a = [...arr];",
+      "find-max": "for (let i = 1; i < size; i++) if (a[i] > a[maxIdx]) maxIdx = i;",
+      "flip-top": "function flip(k) { for (let i=0,j=k; i<j; i++,j--) [a[i],a[j]]=[a[j],a[i]]; }",
+      "flip-place": "if (maxIdx !== size-1) { flip(maxIdx); flip(size-1); }",
+      "return-sorted": "return a;",
+    },
+    java: {
+      "init-length": "public static void sort(int[] arr) {",
+      "find-max": "for (int i = 1; i < size; i++) if (arr[i] > arr[maxIdx]) maxIdx = i;",
+      "flip-top": "static void flip(int[] arr, int k) {",
+      "flip-place": "if (maxIdx != size-1) { flip(arr, maxIdx); flip(arr, size-1); }",
+      "return-sorted": "}",
+    },
+    c: {
+      "init-length": "void pancakeSort(int arr[], int n) {",
+      "find-max": "for (int i=1; i<size; i++) if (arr[i]>arr[maxIdx]) maxIdx=i;",
+      "flip-top": "void flip(int arr[], int k) {",
+      "flip-place": "if (maxIdx!=size-1) { flip(arr, maxIdx); flip(arr, size-1); }",
+      "return-sorted": "}",
+    },
+  },
   "Bridge Finding": {
     javascript: {
       "visit-node": "disc[u] = low[u] = timer++;",
@@ -649,6 +672,13 @@ const markerMessages: Record<string, Record<string, string>> = {
     "shift-elem": "Shifting a larger element right to make room for the key.",
     "insert-key": "Writing the key into its final position for this pass.",
     "return-sorted": "Insertion Sort is complete.",
+  },
+  "Pancake Sort": {
+    "init-length": "Recording the initial stack before flipping.",
+    "find-max": "Scanning the unsorted prefix for the largest pancake.",
+    "flip-top": "Flipping a prefix to bring the maximum to the front.",
+    "flip-place": "Flipping to slide the maximum into its final position.",
+    "return-sorted": "Pancake Sort is complete.",
   },
   "Bridge Finding": {
     "visit-node": "Visiting a node and assigning its discovery and low-link values.",

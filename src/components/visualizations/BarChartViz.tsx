@@ -25,6 +25,7 @@ const combDemoArray = [3, 4, 4, 1, 4, 6, 5, 8, 6, 8, 7, 9, 9, 8, 8];
 const cycleDemoArray = [7, 1, 9, 4, 6, 6, 9, 5, 8, 3, 6, 6, 4, 4, 9];
 const heapsortDemoArray = [4, 3, 8, 7, 4, 1, 4, 6, 7, 8];
 const insertionDemoArray = [9, 5, 1, 7, 3, 3, 8, 5, 4, 9, 9, 9, 8, 5, 2];
+const pancakeDemoArray = [3, 3, 4, 8, 6, 1, 5, 5, 8, 6];
 
 function generateArray(len = 20) {
   return Array.from({ length: len }, () => Math.floor(Math.random() * 90) + 10);
@@ -501,22 +502,87 @@ function pancakeSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
   const n = a.length;
+  const originalStr = input.join(", ");
+  let flipCount = 0;
+
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: [],
+    codeMarker: "init-length",
+    log: `original array - [${originalStr}]`,
+  });
+
   for (let size = n; size > 1; size--) {
+    const round = n - size + 1;
+    const sortedSuffix = Array.from({ length: n - size }, (_, k) => size + k);
+
     let maxIdx = 0;
     for (let i = 1; i < size; i++) {
-      steps.push({ arr: [...a], comparing: [i, maxIdx], sorted: [] });
+      steps.push({
+        arr: [...a],
+        comparing: [i, maxIdx],
+        sorted: sortedSuffix,
+        codeMarker: "find-max",
+        log: `Round ${round}: compare index ${i} (${a[i]}) with max index ${maxIdx} (${a[maxIdx]}).`,
+      });
       if (a[i] > a[maxIdx]) maxIdx = i;
     }
+
+    const sortedNow = Array.from({ length: n - size + 1 }, (_, k) => size - 1 + k);
+
     if (maxIdx !== size - 1) {
-      // flip to bring max to front
+      flipCount++;
+      steps.push({
+        arr: [...a],
+        comparing: Array.from({ length: maxIdx + 1 }, (_, k) => k),
+        sorted: sortedSuffix,
+        codeMarker: "flip-top",
+        log: `Round ${round}: flip at ${maxIdx} (step ${flipCount}) — reverse prefix 0..${maxIdx}.`,
+      });
       for (let i = 0, j = maxIdx; i < j; i++, j--) [a[i], a[j]] = [a[j], a[i]];
-      steps.push({ arr: [...a], comparing: [0], sorted: [] });
-      // flip to put max in correct position
+      steps.push({
+        arr: [...a],
+        comparing: [0],
+        sorted: sortedSuffix,
+        codeMarker: "flip-top",
+        log: `Max value ${a[0]} is now at index 0.`,
+      });
+
+      flipCount++;
+      steps.push({
+        arr: [...a],
+        comparing: Array.from({ length: size }, (_, k) => k),
+        sorted: sortedSuffix,
+        codeMarker: "flip-place",
+        log: `Round ${round}: flip at ${size - 1} (step ${flipCount}) — reverse prefix 0..${size - 1}.`,
+      });
       for (let i = 0, j = size - 1; i < j; i++, j--) [a[i], a[j]] = [a[j], a[i]];
-      steps.push({ arr: [...a], comparing: [size - 1], sorted: Array.from({ length: n - size + 1 }, (_, k) => n - 1 - k) });
+      steps.push({
+        arr: [...a],
+        comparing: [size - 1],
+        sorted: sortedNow,
+        codeMarker: "flip-place",
+        log: `Index ${size - 1} is now fixed (${a[size - 1]} in place).`,
+      });
+    } else {
+      steps.push({
+        arr: [...a],
+        comparing: [size - 1],
+        sorted: sortedNow,
+        codeMarker: "find-max",
+        log: `Round ${round}: max already at index ${size - 1}; no flip needed.`,
+      });
     }
   }
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: n }, (_, i) => i) });
+
+  steps.push({
+    arr: [...a],
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+    codeMarker: "return-sorted",
+    log: "Array is fully sorted.",
+  });
   return steps;
 }
 
@@ -846,6 +912,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   const isCycleSort = algorithmName === "Cycle Sort";
   const isHeapsort = algorithmName === "Heapsort";
   const isInsertionSort = algorithmName === "Insertion Sort";
+  const isPancakeSort = algorithmName === "Pancake Sort";
 
   const reset = useCallback(() => {
     const newArr = isBubbleSort
@@ -858,7 +925,9 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
             ? [...heapsortDemoArray]
             : isInsertionSort
               ? [...insertionDemoArray]
-              : generateArray();
+              : isPancakeSort
+                ? [...pancakeDemoArray]
+                : generateArray();
     setArr(newArr);
     setComparing([]);
     setSorted(new Set());
@@ -870,7 +939,7 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
     stepsRef.current = getSteps(algorithmName, newArr);
     onCodeMarkerChange?.(stepsRef.current[0]?.codeMarker ?? null);
     onStep?.(0, stepsRef.current.length);
-  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, onCodeMarkerChange, onStep]);
+  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, isPancakeSort, onCodeMarkerChange, onStep]);
 
   useEffect(() => {
     reset();
@@ -1143,6 +1212,86 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
             <div>{log || "Press play to start Insertion Sort."}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  if (isPancakeSort) {
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">ChartTracer</div>
+          <div className="flex-1 border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="h-full flex items-end justify-center gap-3">
+              {arr.map((val, i) => {
+                const isComparing = comparing.includes(i);
+                const isSorted = sorted.has(i);
+                return (
+                  <div key={i} className="flex-1 max-w-10 flex flex-col items-center justify-end gap-2 h-full">
+                    <div
+                      className="w-full rounded-t-sm transition-all"
+                      style={{
+                        height: `${(val / maxVal) * 78}%`,
+                        background: isComparing
+                          ? "hsl(224, 85%, 58%)"
+                          : isSorted
+                            ? "hsl(145, 60%, 45%)"
+                            : "hsl(0, 0%, 72%)",
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="flex justify-center gap-1 mb-2">
+              {arr.map((_, i) => (
+                <div key={`idx-${i}`} className="w-7 text-center text-[10px] text-muted-foreground">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-1">
+              {arr.map((val, i) => (
+                <div
+                  key={`pan-val-${i}`}
+                  className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
+                  style={{
+                    background: comparing.includes(i)
+                      ? "hsl(224, 85%, 58%)"
+                      : sorted.has(i)
+                        ? "hsl(145, 60%, 45%)"
+                        : "hsl(150, 10%, 22%)",
+                    borderColor: comparing.includes(i) ? "hsl(224, 85%, 68%)" : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 min-h-28">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
+            <div>{log || "Press play to start Pancake Sort."}</div>
           </div>
         </div>
 
