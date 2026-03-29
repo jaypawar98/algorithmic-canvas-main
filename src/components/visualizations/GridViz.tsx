@@ -12,6 +12,7 @@ type GridStep = {
   highlight: [number, number] | null;
   highlight2?: [number, number] | null;
   codeMarker?: string | null;
+  logs?: string[];
 };
 
 function solveNQueens(n: number): GridStep[] {
@@ -197,20 +198,56 @@ function cellularAutomataSteps(): GridStep[] {
 }
 
 function magicSquareSteps(): GridStep[] {
-  const n = 5;
+  const n = 7;
   const board = Array.from({ length: n }, () => Array(n).fill(0));
   const steps: GridStep[] = [];
-  let r = 0, c = Math.floor(n / 2);
-  for (let num = 1; num <= n * n; num++) {
-    board[r][c] = num;
-    steps.push({ board: board.map(r => [...r]), highlight: [r, c] });
-    const nr = (r - 1 + n) % n, nc = (c + 1) % n;
-    if (board[nr][nc] !== 0) {
-      r = (r + 1) % n;
+  const logs: string[] = [];
+
+  let i = Math.floor(n / 2);
+  let j = n - 1;
+
+  for (let num = 1; num <= n * n;) {
+    logs.push(`i = ${i}`);
+    logs.push(`j = ${j}`);
+    // logger snapshot
+    steps.push({ board: board.map(r => [...r]), highlight: null, logs: [...logs] });
+
+    if (i === -1 && j === n) {
+      j = n - 2;
+      i = 0;
+      logs.push(`Changing : j = ${j}`);
+      logs.push(`Changing : i = ${i}`);
+      steps.push({ board: board.map(r => [...r]), highlight: null, logs: [...logs] });
     } else {
-      r = nr; c = nc;
+      if (j === n) {
+        j = 0;
+        logs.push(`Changing : j = ${j}`);
+        steps.push({ board: board.map(r => [...r]), highlight: null, logs: [...logs] });
+      }
+      if (i < 0) {
+        i = n - 1;
+        logs.push(`Changing : i = ${i}`);
+        steps.push({ board: board.map(r => [...r]), highlight: null, logs: [...logs] });
+      }
     }
+
+    if (board[i][j] > 0) {
+      j -= 2;
+      i++;
+      continue;
+    } else {
+      board[i][j] = num++;
+      steps.push({ board: board.map(r => [...r]), highlight: [i, j], logs: [...logs] });
+    }
+
+    j++;
+    i--;
   }
+
+  const magicConstant = Math.floor(n * (n * n + 1) / 2);
+  logs.push(`Magic Constant is ${magicConstant}`);
+  steps.push({ board: board.map(r => [...r]), highlight: null, logs: [...logs] });
+
   return steps;
 }
 
@@ -220,7 +257,7 @@ function getGridSteps(name: string): { steps: GridStep[]; cellSize: number; show
   if (name.includes("Flood Fill")) return { steps: floodFillSteps(), cellSize: 32, showNumbers: false };
   if (name.includes("Sieve")) return { steps: sieveSteps(), cellSize: 26, showNumbers: true };
   if (name.includes("Cellular")) return { steps: cellularAutomataSteps(), cellSize: 18, showNumbers: false };
-  if (name.includes("Magic")) return { steps: magicSquareSteps(), cellSize: 45, showNumbers: true };
+  if (name.includes("Magic")) return { steps: magicSquareSteps(), cellSize: 32, showNumbers: true };
   return { steps: solveNQueens(8), cellSize: 36, showNumbers: false };
 }
 
@@ -229,6 +266,7 @@ export function GridViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
   const [board, setBoard] = useState<number[][]>([]);
   const [highlight, setHighlight] = useState<[number, number] | null>(null);
   const [highlight2, setHighlight2] = useState<[number, number] | null>(null);
+  const [currentLogs, setCurrentLogs] = useState<string[]>([]);
   const stepRef = useRef(0);
   const intervalRef = useRef<number | null>(null);
 
@@ -249,6 +287,7 @@ export function GridViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
         setBoard(s.board);
         setHighlight(s.highlight);
         setHighlight2(s.highlight2 ?? null);
+        setCurrentLogs(s.logs ?? []);
         onCodeMarkerChange?.(s.codeMarker ?? null);
         stepRef.current++;
       }, Math.max(20, 300 - speed * 28));
@@ -263,11 +302,92 @@ export function GridViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
     setBoard(first ? first.board.map(r => [...r]) : []);
     setHighlight(first?.highlight ?? null);
     setHighlight2(first?.highlight2 ?? null);
+    setCurrentLogs(first?.logs ?? []);
     onCodeMarkerChange?.(first?.codeMarker ?? null);
     stepRef.current = first ? 1 : 0;
   };
 
   if (board.length === 0) return null;
+  
+  const isMagicSquare = algorithmName.includes("Magic");
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isMagicSquare && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentLogs.length, stepRef.current, isMagicSquare]);
+
+  if (isMagicSquare) {
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 bg-[#0a0a0a] rounded-xl overflow-hidden glass border border-white/10 relative">
+        {/* Magic Square Board Panel */}
+        <div className="flex-[5] relative border-b border-border/20 bg-[#111110] flex flex-col min-h-[150px]">
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/40 backdrop-blur-md border border-white/10 rounded text-[10px] text-white/50 font-mono z-10">
+            Magic Square
+          </div>
+          <div className="flex-1 overflow-auto flex items-center justify-center p-4 pt-10">
+            <div className="flex flex-col">
+              <div className="flex justify-start mb-1 h-5">
+                <div className="w-8 shrink-0"></div>
+                {board[0]?.map((_, cIdx) => (
+                  <div key={`ms-col-${cIdx}`} className="w-8 shrink-0 text-center text-[10px] sm:text-xs text-[#555] font-mono flex items-end justify-center">
+                    {cIdx}
+                  </div>
+                ))}
+              </div>
+              {board.map((row, r) => (
+                <div key={`ms-row-${r}`} className="flex justify-start">
+                  <div className="w-8 shrink-0 flex items-center justify-center text-[10px] sm:text-xs text-[#555] font-mono">
+                    {r}
+                  </div>
+                  {row.map((cell, c) => {
+                    const isHighlight = highlight?.[0] === r && highlight?.[1] === c;
+                    return (
+                      <div
+                        key={`ms-cell-${r}-${c}`}
+                        className="w-8 h-8 flex shrink-0 items-center justify-center text-xs sm:text-[13px] font-mono transition-colors"
+                        style={{
+                          background: isHighlight ? "#60a5fa" : "#2563eb",
+                          color: cell > 0 ? "#ffffff" : "transparent",
+                          border: "1px solid #1d4ed8",
+                          boxShadow: isHighlight ? "inset 0 0 10px rgba(255,255,255,0.4)" : "none",
+                        }}
+                      >
+                        {cell > 0 ? cell : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Console Panel */}
+        <div className="flex-[4] relative bg-[#0a0a0a] p-4 flex flex-col min-h-[120px]">
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/40 backdrop-blur-md border border-white/10 rounded text-[10px] text-white/50 font-mono z-10">
+            Console
+          </div>
+          <div className="flex-1 overflow-y-auto mt-6 text-[10px] sm:text-[11px] font-mono text-muted-foreground whitespace-pre">
+            {currentLogs.length > 0 ? (
+              currentLogs.map((L, idx) => <div key={idx} className="mb-0.5 leading-relaxed">{L}</div>)
+            ) : (
+              <div>Press play to begin processing...</div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        <button onClick={reset} className="absolute bottom-2 right-4 text-[10px] text-muted-foreground hover:text-primary transition-colors bg-black/40 px-2 py-1 rounded border border-white/10 z-20">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  // General fallback for all other Grid algorithms
   const { cellSize, showNumbers } = config.current;
   const n = board[0].length;
   const isSieve = algorithmName.includes("Sieve");
@@ -311,7 +431,7 @@ export function GridViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }:
               bg = isHighlight ? "hsl(45, 80%, 35%)" : isDark ? "hsl(150, 15%, 12%)" : "hsl(150, 15%, 18%)";
               if (cell === 1) content = <span className="text-lg">♛</span>;
             } else {
-              // Knight's tour / Magic square / general with numbers
+              // Knight's tour / general with numbers
               bg = isHighlight ? "hsl(145, 60%, 45%)" : cell >= 0 ? "hsl(150, 25%, 18%)" : isDark ? "hsl(150, 15%, 12%)" : "hsl(150, 15%, 16%)";
               if (cell > 0 || (showNumbers && cell >= 0 && !isFlood)) {
                 content = <span className="text-[10px] font-mono">{cell >= 0 ? cell : ""}</span>;

@@ -2411,7 +2411,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
         return ch;
     }).join('');
 }`) },
-    { name: "Caesar Cipher", vizType: "text", description: "Shift cipher encryption/decryption", complexity: { time: "O(n)", space: "O(n)" },
+    { name: "Caesar Cipher", vizType: "dp-table", description: "Shift cipher encryption/decryption", complexity: { time: "O(n)", space: "O(n)" },
       code: c("Caesar Cipher",
         `public class CaesarCipher {
     public static String encrypt(String text, int shift) {
@@ -2574,7 +2574,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
     }
     return sq;
 }`) },
-    { name: "Maze Generation", vizType: "maze", description: "Generate random maze using recursive DFS", complexity: { time: "O(n²)", space: "O(n²)" },
+    { name: "Maze Generation", vizType: "dp-table", description: "Generate random maze using recursive DFS", complexity: { time: "O(n²)", space: "O(n²)" },
       code: c("Maze Generation (DFS)",
         `public class MazeGen {
     static int[][] dirs = {{0,2},{2,0},{0,-2},{-2,0}};

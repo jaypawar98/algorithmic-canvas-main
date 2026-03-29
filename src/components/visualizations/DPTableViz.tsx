@@ -7,7 +7,7 @@ interface Props {
 }
 
 type DPStep = {
-  table: number[] | number[][];
+  table: any[] | any[][];
   current: [number, number?];
   is2D: boolean;
   labels?: { rows?: string[]; cols?: string[] };
@@ -114,6 +114,19 @@ type DPStep = {
     decrypt: string[];
     activeEncryptIdx?: number;
     activeDecryptIdx?: number;
+  };
+  caesar?: {
+    encrypt: string[];
+    decrypt: string[];
+    activeEncryptIdx?: number;
+    activeDecryptIdx?: number;
+  };
+  freivalds?: {
+    A: number[][];
+    B: number[][];
+    C: number[][];
+    r: number[];
+    P: number[];
   };
 };
 
@@ -1213,6 +1226,119 @@ function affineCipherSteps(): DPStep[] {
   return steps;
 }
 
+function caesarCipherSteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const logs: string[] = [];
+  const startStr = "hello! how are you doing?";
+  const alphabet = "abcdefghijklmnopqrstuvwxyz";
+  const rotation = 5;
+  const encrypt: string[] = [];
+  const decrypt: string[] = [];
+
+  const pushStep = (actEnc?: number, actDec?: number) => {
+    steps.push({
+      table: [], current: [-1], is2D: false, dpLogs: [...logs],
+      caesar: { encrypt: [...encrypt], decrypt: [...decrypt], activeEncryptIdx: actEnc, activeDecryptIdx: actDec }
+    });
+  };
+
+  pushStep();
+  
+  logs.push("Beginning Caesar Encryption");
+  pushStep();
+  
+  let currentRes = "";
+  for(let i=0; i < startStr.length; i++) {
+    const char = startStr[i];
+    if (alphabet.includes(char)) {
+       logs.push(`1 up 5 times`);
+       let currChar = char;
+       for (let r=0; r < rotation; r++) {
+         const pos = alphabet.indexOf(currChar);
+         const nextPos = pos === alphabet.length - 1 ? 0 : pos + 1;
+         const nextChar = alphabet[nextPos];
+         logs.push(`${currChar} -> ${nextChar}`);
+         currChar = nextChar;
+       }
+       encrypt.push(currChar);
+       currentRes += currChar;
+       logs.push(`Current result: ${currentRes}`);
+       pushStep(i, undefined);
+    } else {
+       logs.push("Ignore this character");
+       encrypt.push(char);
+       currentRes += char;
+       logs.push(`Current result: ${currentRes}`);
+       pushStep(i, undefined);
+    }
+  }
+  logs.push(`Encrypted result: ${currentRes}`);
+  pushStep();
+
+  logs.push(" ");
+  logs.push("Beginning Caesar Decryption");
+  pushStep(undefined, undefined);
+
+  let decRes = "";
+  for(let i=0; i < encrypt.length; i++) {
+    const char = encrypt[i];
+    if (alphabet.includes(char)) {
+       logs.push(`1 down 5 times`);
+       let currChar = char;
+       for (let r=0; r < rotation; r++) {
+         const pos = alphabet.indexOf(currChar);
+         const nextPos = pos === 0 ? alphabet.length - 1 : pos - 1;
+         const nextChar = alphabet[nextPos];
+         logs.push(`${currChar} -> ${nextChar}`);
+         currChar = nextChar;
+       }
+       decrypt.push(currChar);
+       decRes += currChar;
+       logs.push(`Current result: ${decRes}`);
+       pushStep(undefined, i);
+    } else {
+       logs.push("Ignore this character");
+       decrypt.push(char);
+       decRes += char;
+       logs.push(`Current result: ${decRes}`);
+       pushStep(undefined, i);
+    }
+  }
+  logs.push(`Decrypted result: ${decRes}`);
+  pushStep();
+
+  return steps;
+}
+
+function freivaldsSteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const logs: string[] = [];
+  const A = [[2, 3], [3, 4]];
+  const B = [[1, 0], [1, 2]];
+  const C = [[6, 5], [8, 7]];
+  let r: number[] = [];
+  let P: number[] = [];
+
+  const pushStep = () => {
+    steps.push({
+      table: [], current: [-1], is2D: false, dpLogs: [...logs],
+      freivalds: { A, B, C, r: [...r], P: [...P] }
+    });
+  };
+
+  pushStep();
+
+  logs.push("Iterations remained: 4");
+  r = [1, 0];
+  P = [-7, -10];
+  pushStep();
+
+  logs.push("P[0] !== 0 (-7), exit");
+  pushStep();
+
+  return steps;
+}
+
 function slidingWindowSteps(): DPStep[] {
   const D = [4, 2, 4, -4, -1, -4, 2, 2, -4, 0, -4, 4, -3, -3, -4, 1, -3, 0, -1, 0];
   const logs: string[] = [];
@@ -1463,23 +1589,94 @@ function millerRabinSteps(): DPStep[] {
   return steps;
 }
 
-function freivaldsSteps(): DPStep[] {
-  const A = [[1, 2], [3, 4]];
-  const B = [[5, 6], [7, 8]];
-  const C = [[19, 22], [43, 50]]; // correct AB
+
+
+function mazeGenerationSteps(): DPStep[] {
+  const n = 6, m = 6;
+  const hEnd = m * 4 - (m - 1);
+  const vEnd = n * 3 - (n - 1);
+  const G: string[][] = [];
+  const logs: string[] = [];
   const steps: DPStep[] = [];
-  for (let trial = 0; trial < 3; trial++) {
-    const r = [Math.round(Math.random()), Math.round(Math.random())];
-    // Compute Br
-    const Br = [B[0][0] * r[0] + B[0][1] * r[1], B[1][0] * r[0] + B[1][1] * r[1]];
-    steps.push({ table: [r[0], r[1], Br[0], Br[1]], current: [2], is2D: false });
-    // Compute ABr
-    const ABr = [A[0][0] * Br[0] + A[0][1] * Br[1], A[1][0] * Br[0] + A[1][1] * Br[1]];
-    steps.push({ table: [r[0], r[1], Br[0], Br[1], ABr[0], ABr[1]], current: [4], is2D: false });
-    // Compute Cr
-    const Cr = [C[0][0] * r[0] + C[0][1] * r[1], C[1][0] * r[0] + C[1][1] * r[1]];
-    steps.push({ table: [ABr[0], ABr[1], Cr[0], Cr[1], ABr[0] === Cr[0] ? 1 : 0, ABr[1] === Cr[1] ? 1 : 0], current: [4], is2D: false });
+
+  const labelsCols = Array.from({ length: hEnd }, (_, i) => String(i));
+  const labelsRows = Array.from({ length: vEnd }, (_, i) => String(i));
+
+  const pushStep = (r: number, c: number, line?: string) => {
+    if (line) logs.push(line);
+    steps.push({
+      table: G.map(row => [...row]) as any[][],
+      current: [r, c],
+      is2D: true,
+      labels: { rows: labelsRows, cols: labelsCols },
+      dpLogs: [...logs]
+    });
+  };
+
+  for (let i = 0; i < vEnd; i++) {
+    G[i] = new Array(hEnd).fill(' ');
+    for (let j = 0; j < hEnd; j++) {
+      if (i === 0 && j === 0) G[i][j] = '┌';
+      else if (i === 0 && j === hEnd - 1) G[i][j] = '┐';
+      else if (i === vEnd - 1 && j === 0) G[i][j] = '└';
+      else if (i === vEnd - 1 && j === hEnd - 1) G[i][j] = '┘';
+      else if ((j % 3 === 0) && (i % vEnd !== 0 && i !== vEnd - 1 && i % 2 === 1)) G[i][j] = '|';
+      else if (i % 2 === 0) G[i][j] = '-';
+    }
   }
+
+  for (let j = 3; j < hEnd - 1; j += 3) {
+    if (m > 1) G[0][j] = '┬';
+    if (m > 1) G[vEnd - 1][j] = '┴';
+  }
+  for (let i = 2; i < vEnd - 1; i += 2) {
+    if (n > 1) G[i][0] = '├';
+    if (n > 1) G[i][hEnd - 1] = '┤';
+    for (let j = 3; j < hEnd - 1; j += 3) {
+      if (m > 1 && n > 1) G[i][j] = '┼';
+    }
+  }
+  
+  pushStep(-1, -1, "Initialize Grid");
+
+  const visited = new Set<string>();
+  
+  function carve(r: number, c: number) {
+    visited.add(`${r},${c}`);
+    const vr = r * 2 + 1;
+    const vc = c * 3 + 1;
+    G[vr][vc] = ' ';
+    G[vr][vc + 1] = ' ';
+    pushStep(vr, vc, `Visiting cell (${r}, ${c})`);
+
+    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]].sort(() => Math.random() - 0.5);
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < n && nc >= 0 && nc < m && !visited.has(`${nr},${nc}`)) {
+        const wr = r * 2 + 1 + dr;
+        let wc = c * 3 + 1;
+        if (dc === 1) wc += 2;
+        else if (dc === -1) wc -= 1;
+        else if (dr === 1) wc = c * 3 + 1;
+        else if (dr === -1) wc = c * 3 + 1;
+        
+        if (dr !== 0) {
+           G[wr][wc] = ' ';
+           G[wr][wc+1] = ' ';
+           pushStep(wr, wc, `Remove horizontal wall between (${r},${c}) and (${nr},${nc})`);
+        } else {
+           G[wr][wc] = ' ';
+           pushStep(wr, wc, `Remove vertical wall between (${r},${c}) and (${nr},${nc})`);
+        }
+        
+        carve(nr, nc);
+        pushStep(vr, vc, `Backtracking to (${r}, ${c})`);
+      }
+    }
+  }
+  
+  carve(0, 0);
+  pushStep(-1, -1, "Maze Generation Complete!");
   return steps;
 }
 
@@ -1503,7 +1700,6 @@ function getSteps(name: string): DPStep[] {
   if (name.includes("Freivalds")) return freivaldsSteps();
   if (name.includes("Sieve")) return sieveSteps(30);
   if (name.includes("Sliding Window")) return slidingWindowSteps();
-  if (name.includes("Ugly")) return uglySteps(15);
   if (name.includes("Z String")) return zSearchSteps();
   if (name.includes("Boyer")) return boyerMooreMajoritySteps();
   if (name.includes("Job Scheduling")) return jobSchedulingSteps();
@@ -1512,6 +1708,8 @@ function getSteps(name: string): DPStep[] {
   if (name.includes("Euclidean")) return euclideanGCDSteps();
   if (name.includes("Suffix Array")) return suffixArraySteps();
   if (name.includes("Affine")) return affineCipherSteps();
+  if (name.includes("Caesar")) return caesarCipherSteps();
+  if (name.includes("Maze")) return mazeGenerationSteps();
   return fibSteps(14);
 }
 
@@ -3579,6 +3777,230 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
               ))
             ) : (
               <div>Press play to begin affine mapping.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isCaesar = algorithmName.includes("Caesar Cipher") && currentStep.caesar;
+  if (isCaesar) {
+    const { encrypt, decrypt, activeEncryptIdx, activeDecryptIdx } = currentStep.caesar!;
+    const borderDark = "hsl(215, 10%, 25%)";
+    const bgDark = "hsl(215, 12%, 18%)";
+    const bgPink = "hsl(330, 80%, 45%)";
+    const activeBorder = "hsl(224, 76%, 58%)"; 
+    
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-6 gap-6">
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Encryption</div>
+            <div className="flex items-center justify-start sm:justify-center mt-6 overflow-x-auto px-4 pb-2">
+              <div className="flex flex-col mx-auto min-w-max">
+                <div className="flex justify-start mb-1 h-6">
+                  {encrypt.length === 0 ? (
+                    <div className="h-6 w-full" />
+                  ) : encrypt.map((_, i) => (
+                    <div key={`cer-enc-idx-${i}`} className="w-7 sm:w-8 shrink-0 text-center text-[10px] sm:text-xs text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {encrypt.map((char, i) => {
+                    const isLetter = /^[a-z]$/i.test(char);
+                    const isActive = i === activeEncryptIdx;
+                    return (
+                      <div
+                        key={`cer-enc-char-${i}`}
+                        className="w-7 sm:w-8 h-8 flex shrink-0 items-center justify-center text-xs sm:text-sm font-mono transition-colors"
+                        style={{
+                          background: isLetter ? bgPink : bgDark,
+                          color: isLetter ? "white" : "hsl(150, 10%, 60%)",
+                          borderTop: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderBottom: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderLeft: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderRight: i === encrypt.length - 1 || isActive ? `1px solid ${isActive ? activeBorder : borderDark}` : 'none',
+                          boxShadow: isActive ? `0 0 0 1px ${activeBorder}` : 'none',
+                          zIndex: isActive ? 10 : 1
+                        }}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Decryption</div>
+            <div className="flex items-center justify-start sm:justify-center mt-6 overflow-x-auto px-4 pb-2">
+              <div className="flex flex-col mx-auto min-w-max">
+                <div className="flex justify-start mb-1 h-6">
+                  {decrypt.length === 0 ? (
+                    <div className="h-6 w-full" />
+                  ) : decrypt.map((_, i) => (
+                    <div key={`cer-dec-idx-${i}`} className="w-7 sm:w-8 shrink-0 text-center text-[10px] sm:text-xs text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {decrypt.map((char, i) => {
+                    const isLetter = /^[a-z]$/i.test(char);
+                    const isActive = i === activeDecryptIdx;
+                    return (
+                      <div
+                        key={`cer-dec-char-${i}`}
+                        className="w-7 sm:w-8 h-8 flex shrink-0 items-center justify-center text-xs sm:text-sm font-mono transition-colors"
+                        style={{
+                          background: isLetter ? bgPink : bgDark,
+                          color: isLetter ? "white" : "hsl(150, 10%, 60%)",
+                          borderTop: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderBottom: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderLeft: `1px solid ${isActive ? activeBorder : borderDark}`,
+                          borderRight: i === decrypt.length - 1 || isActive ? `1px solid ${isActive ? activeBorder : borderDark}` : 'none',
+                          boxShadow: isActive ? `0 0 0 1px ${activeBorder}` : 'none',
+                          zIndex: isActive ? 10 : 1
+                        }}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line.trim() === "" ? "\n" : line}</div>
+              ))
+            ) : (
+              <div>Press play to begin Caesar mapping.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isFreivalds = algorithmName.includes("Freivalds") && currentStep.freivalds;
+  if (isFreivalds) {
+    const { A, B, C, r, P } = currentStep.freivalds!;
+    const borderDark = "hsl(215, 10%, 25%)";
+    const bgDark = "hsl(215, 12%, 18%)";
+    
+    const renderMatrix = (matrix: number[][], title: string) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3">
+        <div className="text-[10px] text-muted-foreground mb-4 pl-4">{title}</div>
+        <div className="flex items-center justify-center overflow-x-auto pb-2">
+          <div className="flex flex-col mx-auto">
+            <div className="flex justify-start mb-1 h-5">
+              <div className="w-7 sm:w-8 shrink-0"></div>
+              {matrix[0]?.map((_, j) => (
+                <div key={`m-col-${j}`} className="w-7 sm:w-8 shrink-0 text-center text-[10px] sm:text-xs text-muted-foreground font-mono flex items-end justify-center">
+                  {j}
+                </div>
+              ))}
+            </div>
+            {matrix.map((row, i) => (
+              <div key={`m-row-${i}`} className="flex justify-start">
+                <div className="w-7 sm:w-8 shrink-0 flex items-center justify-center text-[10px] sm:text-xs text-muted-foreground font-mono">
+                  {i}
+                </div>
+                {row.map((val, j) => (
+                  <div
+                    key={`m-cell-${i}-${j}`}
+                    className="w-7 sm:w-8 h-7 sm:h-8 flex shrink-0 items-center justify-center text-xs sm:text-sm font-mono text-gray-300"
+                    style={{
+                      background: bgDark,
+                      borderTop: `1px solid ${borderDark}`,
+                      borderBottom: i === matrix.length - 1 ? `1px solid ${borderDark}` : 'none',
+                      borderLeft: `1px solid ${borderDark}`,
+                      borderRight: j === row.length - 1 ? `1px solid ${borderDark}` : 'none'
+                    }}
+                  >
+                    {val}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+
+    const renderVector = (vec: number[], title: string) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3">
+        <div className="text-[10px] text-muted-foreground mb-4 pl-4">{title}</div>
+        <div className="flex items-center justify-center overflow-x-auto pb-2">
+          <div className="flex flex-col mx-auto">
+            <div className="flex justify-start mb-1 h-5">
+              {vec.length === 0 ? <div className="h-5 w-full"/> : vec.map((_, i) => (
+                <div key={`v-idx-${i}`} className="w-7 sm:w-8 shrink-0 text-center text-[10px] sm:text-xs text-muted-foreground font-mono flex items-end justify-center">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {vec.map((val, i) => (
+                <div
+                  key={`v-val-${i}`}
+                  className="w-7 sm:w-8 h-7 sm:h-8 flex shrink-0 items-center justify-center text-xs sm:text-sm font-mono text-gray-300"
+                  style={{
+                    background: bgDark,
+                    borderTop: `1px solid ${borderDark}`,
+                    borderBottom: `1px solid ${borderDark}`,
+                    borderLeft: `1px solid ${borderDark}`,
+                    borderRight: i === vec.length - 1 ? `1px solid ${borderDark}` : 'none'
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-6 gap-2 sm:gap-4">
+          {renderMatrix(A, "Matrix A")}
+          {renderMatrix(B, "Matrix B")}
+          {renderMatrix(C, "Matrix C")}
+          {renderVector(r, "Random Vector")}
+          {renderVector(P, "Result Vector")}
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line.trim() === "" ? "\n" : line}</div>
+              ))
+            ) : (
+              <div>Press play to verify matrix multiplication.</div>
             )}
           </div>
         </div>
