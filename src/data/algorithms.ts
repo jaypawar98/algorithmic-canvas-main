@@ -1716,7 +1716,7 @@ void kmp(char* txt, char* pat) {
             dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
     return dp[m][n];
 }`) },
-    { name: "Longest Increasing Subsequence", vizType: "bars", description: "Find longest increasing subsequence", complexity: { time: "O(n²)", space: "O(n)" },
+    { name: "Longest Increasing Subsequence", vizType: "dp-table", description: "Find longest increasing subsequence", complexity: { time: "O(n²)", space: "O(n)" },
       code: c("LIS",
         `public class LIS {
     public static int lis(int[] arr) {
@@ -1767,7 +1767,7 @@ void kmp(char* txt, char* pat) {
         for (let i=0; i<=n-len; i++) { const j=i+len-1; dp[i][j]=s[i]===s[j]?dp[i+1][j-1]+2:Math.max(dp[i+1][j],dp[i][j-1]); }
     return dp[0][n-1];
 }`) },
-    { name: "Maximum Subarray", vizType: "bars", description: "Find contiguous subarray with largest sum (Kadane's)", complexity: { time: "O(n)", space: "O(1)" },
+    { name: "Maximum Subarray", vizType: "dp-table", description: "Find contiguous subarray with largest sum (Kadane's)", complexity: { time: "O(n)", space: "O(1)" },
       code: c("Kadane's Algorithm",
         `public class MaxSubarray {
     public static int maxSubArray(int[] nums) {
@@ -1893,7 +1893,7 @@ void kmp(char* txt, char* pat) {
             dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1]+1 : Math.min(dp[i-1][j], dp[i][j-1])+1;
     return dp[m][n];
 }`) },
-    { name: "Sieve of Eratosthenes", vizType: "grid", description: "Find all primes up to n", complexity: { time: "O(n log log n)", space: "O(n)" },
+    { name: "Sieve of Eratosthenes", vizType: "dp-table", description: "Find all primes up to n", complexity: { time: "O(n log log n)", space: "O(n)" },
       code: c("Sieve of Eratosthenes",
         `public class Sieve {
     public static boolean[] sieve(int n) {
@@ -1917,7 +1917,7 @@ void kmp(char* txt, char* pat) {
         if (isPrime[p]) for (let m=p*p; m<=n; m+=p) isPrime[m]=false;
     return isPrime.map((v,i) => v ? i : null).filter(Boolean);
 }`) },
-    { name: "Sliding Window", vizType: "bars", description: "Maintain a window of elements", complexity: { time: "O(n)", space: "O(k)" },
+    { name: "Sliding Window", vizType: "dp-table", description: "Maintain a window of elements", complexity: { time: "O(n)", space: "O(k)" },
       code: c("Sliding Window Maximum",
         `public class SlidingWindow {
     public static int[] maxWindow(int[] arr, int k) {
@@ -1988,7 +1988,7 @@ void kmp(char* txt, char* pat) {
     }
     return ugly[n-1];
 }`) },
-    { name: "Z String Search", vizType: "text", description: "String matching using Z-array", complexity: { time: "O(n+m)", space: "O(n+m)" },
+    { name: "Z String Search", vizType: "dp-table", description: "String matching using Z-array", complexity: { time: "O(n+m)", space: "O(n+m)" },
       code: c("Z Algorithm",
         `public class ZSearch {
     static int[] buildZ(String s) {
@@ -2031,7 +2031,7 @@ void kmp(char* txt, char* pat) {
 }`) },
   ],
   "Greedy": [
-    { name: "Boyer–Moore's Majority Vote", vizType: "bars", description: "Find majority element in linear time", complexity: { time: "O(n)", space: "O(1)" },
+    { name: "Boyer–Moore's Majority Vote", vizType: "dp-table", description: "Find majority element in linear time", complexity: { time: "O(n)", space: "O(1)" },
       code: c("Boyer-Moore Majority Vote",
         `public class MajorityVote {
     public static int majorityElement(int[] nums) {
@@ -2101,7 +2101,7 @@ void kmp(char* txt, char* pat) {
     }
     return dist;
 }`) },
-    { name: "Job Scheduling Problem", vizType: "bars", description: "Schedule jobs to maximize profit", complexity: { time: "O(n²)", space: "O(n)" },
+    { name: "Job Scheduling Problem", vizType: "dp-table", description: "Schedule jobs to maximize profit", complexity: { time: "O(n²)", space: "O(n)" },
       code: c("Job Scheduling",
         `public class JobScheduling {
     public static int schedule(int[][] jobs) {

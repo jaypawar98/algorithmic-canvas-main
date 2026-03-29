@@ -208,6 +208,52 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
     return { nodes, edges };
   }
 
+  if (algorithmName.includes("Dijkstra")) {
+    const nodes: Node[] = [
+      { id: 0, x: 200, y: 40 },
+      { id: 1, x: 300, y: 110 },
+      { id: 2, x: 260, y: 220 },
+      { id: 3, x: 140, y: 220 },
+      { id: 4, x: 100, y: 110 },
+    ];
+    const edges: Edge[] = [
+      { from: 3, to: 0, weight: 3 },
+      { from: 3, to: 1, weight: 1 },
+      { from: 3, to: 2, weight: 1 },
+      { from: 3, to: 4, weight: 1 },
+      { from: 0, to: 1, weight: 9 },
+      { from: 0, to: 2, weight: 6 },
+      { from: 0, to: 4, weight: 4 },
+      { from: 1, to: 2, weight: 1 },
+      { from: 1, to: 4, weight: 1 },
+      { from: 2, to: 4, weight: 2 },
+    ];
+    return { nodes, edges };
+  }
+
+  if (algorithmName.includes("Kruskal")) {
+    const nodes: Node[] = [
+      { id: 0, x: 200, y: 40 },
+      { id: 1, x: 300, y: 110 },
+      { id: 2, x: 260, y: 220 },
+      { id: 3, x: 140, y: 220 },
+      { id: 4, x: 100, y: 110 },
+    ];
+    const edges: Edge[] = [
+      { from: 0, to: 1, weight: 8 },
+      { from: 1, to: 2, weight: 5 },
+      { from: 2, to: 3, weight: 9 },
+      { from: 3, to: 4, weight: 5 },
+      { from: 4, to: 0, weight: 8 },
+      { from: 0, to: 2, weight: 4 },
+      { from: 0, to: 3, weight: 6 },
+      { from: 1, to: 4, weight: 3 },
+      { from: 1, to: 3, weight: 3 },
+      { from: 2, to: 4, weight: 3 },
+    ];
+    return { nodes, edges };
+  }
+
   const count = 8;
   const nodes: Node[] = [];
   for (let i = 0; i < count; i++) {
@@ -426,25 +472,42 @@ function dijkstraSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const dist = Array(n).fill(Infinity);
   const vis = new Set<number>();
   const steps: GStep[] = [];
-  dist[0] = 0;
+  const logs: string[] = [];
+  
+  const SRC = 3;
+  dist[SRC] = 0;
 
   for (let i = 0; i < n; i++) {
     let u = -1;
     for (let v = 0; v < n; v++) if (!vis.has(v) && (u === -1 || dist[v] < dist[u])) u = v;
     if (u === -1 || dist[u] === Infinity) break;
     vis.add(u);
+    
     const labels: Record<number, string> = {};
     for (let v = 0; v < n; v++) labels[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
-    steps.push({ visited: [...vis], current: u, activeEdges: steps.length > 0 ? [...steps[steps.length - 1].activeEdges] : [], nodeLabels: labels });
+    
+    steps.push({ visited: [...vis], current: u, activeEdges: steps.length > 0 ? [...steps[steps.length - 1].activeEdges] : [], nodeLabels: labels, logs: [...logs] });
+    
     for (const { to, w } of adj[u]) {
-      if (!vis.has(to) && dist[u] + w < dist[to]) {
-        dist[to] = dist[u] + w;
-        const labels2: Record<number, string> = {};
-        for (let v = 0; v < n; v++) labels2[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
-        steps.push({ visited: [...vis], current: u, activeEdges: [...steps[steps.length - 1].activeEdges, edgeKey(u, to)], nodeLabels: labels2 });
+      if (!vis.has(to)) {
+        logs.push(`-> ${to}`);
+        steps.push({ visited: [...vis], current: u, activeEdges: [...(steps[steps.length - 1]?.activeEdges || []), edgeKey(u, to)], nodeLabels: labels, logs: [...logs] });
+        if (dist[u] + w < dist[to]) {
+          dist[to] = dist[u] + w;
+          logs.push(`<- ${dist[to]}`);
+          const labels2: Record<number, string> = {};
+          for (let v = 0; v < n; v++) labels2[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
+          steps.push({ visited: [...vis], current: to, activeEdges: [...(steps.length > 0 ? steps[steps.length - 1].activeEdges : []), edgeKey(u, to)], nodeLabels: labels2, logs: [...logs] });
+        }
       }
     }
   }
+  logs.push(`The shortest path from ${SRC} to 0 is ${dist[0]}`);
+  
+  const finalLabels: Record<number, string> = {};
+  for (let v = 0; v < n; v++) finalLabels[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
+  steps.push({ visited: [...vis], current: -1, activeEdges: [], nodeLabels: finalLabels, logs: [...logs] });
+  
   return steps;
 }
 
@@ -455,17 +518,24 @@ function kruskalSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const steps: GStep[] = [];
   const mstEdges: string[] = [];
   const connected = new Set<number>();
+  let wsum = 0;
+  const logs: string[] = [];
+  
   for (const e of sorted) {
     const pu = find(e.from), pv = find(e.to);
-    steps.push({ visited: [...connected], current: e.from, activeEdges: [...mstEdges, edgeKey(e.from, e.to)] });
+    steps.push({ visited: [...connected], current: e.from, activeEdges: [...mstEdges, edgeKey(e.from, e.to)], logs: [...logs] });
     if (pu !== pv) {
       parent[pu] = pv;
+      wsum += e.weight;
       mstEdges.push(edgeKey(e.from, e.to));
       connected.add(e.from);
       connected.add(e.to);
-      steps.push({ visited: [...connected], current: e.to, activeEdges: [...mstEdges] });
+      steps.push({ visited: [...connected], current: e.to, activeEdges: [...mstEdges], logs: [...logs] });
     }
   }
+  
+  logs.push(`The sum of all edges is: ${wsum}`);
+  steps.push({ visited: [...connected], current: -1, activeEdges: [...mstEdges], logs: [...logs] });
   return steps;
 }
 
@@ -1547,7 +1617,41 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           </div>
         </>
       )}
-      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) && (
+      {algorithmName.includes("Dijkstra") && (
+        <div className="w-full mt-4 max-w-[24rem]">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 max-w-min mx-auto">
+            <div className="flex justify-start mb-1">
+              {graph.nodes.map((n) => (
+                <div key={`dj-idx-${n.id}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">{n.id}</div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {graph.nodes.map((n, i) => {
+                const isInf = !nodeLabels || Object.keys(nodeLabels).length === 0 || nodeLabels[n.id] === undefined || nodeLabels[n.id] === "∞";
+                const val = isInf ? "∞" : nodeLabels[n.id];
+                return (
+                  <div
+                    key={`dj-val-${n.id}`}
+                    className="w-8 h-8 flex shrink-0 items-center justify-center text-[11px] font-mono transition-colors"
+                    style={{
+                      background: isInf ? "hsl(215, 15%, 15%)" : "hsl(224, 76%, 48%)", // visualizer complete blue
+                      color: isInf ? "hsl(150, 20%, 88%)" : "white",
+                      borderTop: '1px solid hsl(215, 10%, 26%)',
+                      borderBottom: '1px solid hsl(215, 10%, 26%)',
+                      borderLeft: '1px solid hsl(215, 10%, 26%)',
+                      borderRight: i === graph.nodes.length - 1 ? '1px solid hsl(215, 10%, 26%)' : 'none',
+                    }}
+                  >
+                    {val}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      {(algorithmName.includes("Dijkstra") || algorithmName.includes("Kruskal") || isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) && (
         <div className="w-full mt-6 border-t border-border/20 pt-3 max-w-[24rem]">
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
@@ -1555,7 +1659,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
               <div key={`${index}-${entry}`}>{entry}</div>
             )) : (
               <div>
-                {isPageRank ? "Press play to run PageRank." : isTarjan ? "Press play to run Tarjan SCC." : isBellmanFord ? "Press play to run Bellman-Ford." : "Press play to start the search."}
+                {isPageRank ? "Press play to run PageRank." : isTarjan ? "Press play to run Tarjan SCC." : isBellmanFord ? "Press play to run Bellman-Ford." : "Press play to start."}
               </div>
             )}
           </div>

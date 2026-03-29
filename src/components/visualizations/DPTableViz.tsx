@@ -34,6 +34,59 @@ type DPStep = {
     hl1: number[];
     hl2: number[];
   };
+  /** LPS: string array, highlight logic for string */
+  lps?: {
+    str: string[];
+    hl1: number[];
+    hl2: number[];
+  };
+  /** Max Sum Path: original grid */
+  maxSumPath?: {
+    grid: number[][];
+  };
+  /** Pascal's Triangle */
+  pascal?: boolean;
+  /** Shortest Common Supersequence */
+  scs?: {
+    str1: string[];
+    str2: string[];
+  };
+  /** Sieve of Eratosthenes */
+  sieve?: {
+    marks: boolean[];
+    p: number;
+    c: number;
+  };
+  slidingWindow?: {
+    l: number;
+    r: number;
+    max: number;
+  };
+  /** Ugly Numbers mapping */
+  ugly?: {
+    M: [number, number, number];
+    I: [number, number, number];
+  };
+  zSearch?: {
+    text: string[];
+    pattern: string[];
+    concat: string[];
+    zArray: number[];
+    l: number;
+    r: number;
+  };
+  majorityVote?: {
+    A: number[];
+    candidate: number | null;
+  };
+  jobScheduling?: {
+    schedule: string[];
+    jobIds: string[];
+    deadlines: number[];
+    profits: number[];
+    activeIdx?: number;
+    activeSlot?: number;
+  };
 };
 
 /** D[0]=D[1]=1, D[i]=D[i-1]+D[i-2]; indices 0..lastIndex match algorithm-visualizer "Sequence". */
@@ -127,15 +180,30 @@ function factorialSteps(n: number): DPStep[] {
 }
 
 function pascalSteps(n: number): DPStep[] {
-  const tri: number[][] = [];
+  const dp: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
   const steps: DPStep[] = [];
+  const indices = Array.from({ length: n }, (_, i) => String(i));
+  
+  const pushStep = (i: number, j: number) => {
+    steps.push({
+      table: dp.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: indices, cols: indices },
+      pascal: true
+    });
+  };
+
+  pushStep(-1, -1);
   for (let i = 0; i < n; i++) {
-    tri[i] = Array(i + 1).fill(0);
-    tri[i][0] = 1; tri[i][i] = 1;
-    for (let j = 1; j < i; j++) {
-      tri[i][j] = tri[i - 1][j - 1] + tri[i - 1][j];
+    for (let j = 0; j <= i; j++) {
+      if (j === i || j === 0) {
+        dp[i][j] = 1;
+      } else {
+        dp[i][j] = dp[i - 1][j - 1] + dp[i - 1][j];
+      }
+      pushStep(i, j);
     }
-    steps.push({ table: tri.map(r => [...r]), current: [i], is2D: false });
   }
   return steps;
 }
@@ -352,17 +420,52 @@ function editDistSteps(): DPStep[] {
 
 function lpsSteps(): DPStep[] {
   const s = "BBABCBCAB";
+  const str = s.split("");
   const n = s.length;
+  // Initialize with empty strings or nulls to match typical visualizer styles,
+  // or just use 0's but we only show the upper triangle.
   const dp: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
-  for (let i = 0; i < n; i++) dp[i][i] = 1;
+  const logs: string[] = [];
   const steps: DPStep[] = [];
+  const indices = Array.from({ length: n }, (_, i) => String(i));
+  
+  const pushStep = (i: number, j: number, hl1: number[] = []) => {
+    steps.push({
+      table: dp.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: indices, cols: indices },
+      dpLogs: [...logs],
+      lps: { str, hl1, hl2: [] }
+    });
+  };
+
+  logs.push(`LPS for any string with length = 1 is 1`);
+  logs.push(`---------------------------------------------`);
+  for (let i = 0; i < n; i++) {
+    dp[i][i] = 1;
+  }
+  pushStep(-1, -1);
+
   for (let len = 2; len <= n; len++) {
+    logs.push(`Considering a sub-string of length ${len}`);
     for (let i = 0; i <= n - len; i++) {
       const j = i + len - 1;
-      dp[i][j] = s[i] === s[j] ? dp[i + 1][j - 1] + 2 : Math.max(dp[i + 1][j], dp[i][j - 1]);
-      steps.push({ table: dp.map(r => [...r]), current: [i, j], is2D: true, labels: { rows: s.split(""), cols: s.split("") } });
+      pushStep(i, j, [i, j]);
+      if (s[i] === s[j]) {
+        dp[i][j] = len === 2 ? 2 : dp[i + 1][j - 1] + 2;
+        logs.push(`Characters match. table[${i}][${j}] = ${dp[i][j]}`);
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j - 1]);
+        logs.push(`No match. table[${i}][${j}] = max(${dp[i + 1][j]}, ${dp[i][j - 1]}) = ${dp[i][j]}`);
+      }
+      pushStep(i, j, [i, j]);
     }
   }
+  
+  logs.push(`Maximum LPS length is ${dp[0][n - 1]}`);
+  pushStep(0, n - 1, [0, n - 1]);
+
   return steps;
 }
 
@@ -452,32 +555,343 @@ function scsSteps(): DPStep[] {
   const b = "GXTXAYB";
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  const logs: string[] = [];
   const steps: DPStep[] = [];
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.min(dp[i - 1][j], dp[i][j - 1]) + 1;
-      steps.push({ table: dp.map(r => [...r]), current: [i, j], is2D: true, labels: { rows: ["", ...a.split("")], cols: ["", ...b.split("")] } });
+  const labelsX = Array.from({ length: n + 1 }, (_, j) => String(j));
+  const labelsY = Array.from({ length: m + 1 }, (_, i) => String(i));
+  
+  const pushStep = (i: number, j: number) => {
+    steps.push({
+      table: dp.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: labelsY, cols: labelsX },
+      dpLogs: [...logs],
+      scs: { str1: a.split(""), str2: b.split("") }
+    });
+  };
+
+  pushStep(-1, -1);
+  for (let i = 0; i <= m; i++) {
+    for (let j = 0; j <= n; j++) {
+      if (i === 0) {
+        dp[i][j] = j;
+        logs.push(`DP[0][${j}] = ${j}`);
+      } else if (j === 0) {
+        dp[i][j] = i;
+        if (i > 0) logs.push(`DP[${i}][0] = ${i}`);
+      } else {
+        if (a[i - 1] === b[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+          logs.push(`a[${i-1}] == b[${j-1}], DP[${i}][${j}] = DP[${i-1}][${j-1}] + 1 = ${dp[i][j]}`);
+        } else {
+          dp[i][j] = Math.min(dp[i - 1][j], dp[i][j - 1]) + 1;
+          logs.push(`DP[${i}][${j}] = 1 + min(DP[${i-1}][${j}], DP[${i}][${j-1}]) = ${dp[i][j]}`);
+        }
+      }
+      pushStep(i, j);
     }
   }
+  logs.push(`Shortest Common Supersequence is ${dp[m][n]}`);
+  pushStep(m, n);
+  
   return steps;
 }
 
 function uglySteps(n: number): DPStep[] {
   const dp = [1];
   let i2 = 0, i3 = 0, i5 = 0;
-  const steps: DPStep[] = [{ table: [1], current: [0], is2D: false }];
+  let m2 = 2, m3 = 3, m5 = 5;
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (idx: number) => {
+    steps.push({
+      table: [...dp],
+      current: [idx],
+      is2D: false,
+      dpLogs: [...logs],
+      ugly: {
+        M: [m2, m3, m5],
+        I: [i2, i3, i5]
+      }
+    });
+  };
+
+  pushStep(0);
+
   for (let i = 1; i < n; i++) {
-    const next = Math.min(dp[i2] * 2, dp[i3] * 3, dp[i5] * 5);
+    const next = Math.min(m2, m3, m5);
+    logs.push(`Minimum of ${m2}, ${m3}, ${m5} : ${next}`);
     dp.push(next);
-    if (next === dp[i2] * 2) i2++;
-    if (next === dp[i3] * 3) i3++;
-    if (next === dp[i5] * 5) i5++;
-    steps.push({ table: [...dp], current: [i], is2D: false });
+    
+    // We update M to keep UI synchronized immediately if selected 
+    if (next === m2) { i2++; m2 = dp[i2] * 2; }
+    if (next === m3) { i3++; m3 = dp[i3] * 3; }
+    if (next === m5) { i5++; m5 = dp[i5] * 5; }
+    
+    pushStep(i);
   }
   return steps;
 }
+
+function sieveSteps(n: number): DPStep[] {
+  const marks = Array(n + 1).fill(false);
+  marks[1] = true;
+  const table = Array.from({ length: n }, (_, i) => i + 1);
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+
+  const pushStep = (p: number, c: number) => {
+    steps.push({
+      table: [...table],
+      current: [c > 0 ? c - 1 : p > 0 ? p - 1 : -1],
+      is2D: false,
+      dpLogs: [...logs],
+      sieve: { marks: [...marks], p, c }
+    });
+  };
+
+  logs.push(`Initialize a boolean array of size ${n + 1} with false.`);
+  pushStep(-1, -1);
+
+  for (let p = 2; p <= n; p++) {
+    if (!marks[p]) {
+      logs.push(`${p} is not marked, so it is prime`);
+      pushStep(p, -1);
+      
+      for (let i = p + p; i <= n; i += p) {
+        marks[i] = true;
+        logs.push(`${i} is a multiple of ${p} so it is marked as composite`);
+        pushStep(p, i);
+      }
+    }
+  }
+
+  logs.push(`The unmarked numbers are the prime numbers from 1 to ${n}`);
+  pushStep(-1, -1);
+  return steps;
+}
+
+function zSearchSteps(): DPStep[] {
+  const pattern = "abc";
+  const text = "xabcabzabc";
+  const concatStr = pattern + "$" + text;
+  const N = concatStr.length;
+  const z = Array(N).fill(0);
+  
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (idx: number, lPos: number, rPos: number) => {
+    steps.push({
+      table: [],
+      current: [idx],
+      is2D: false,
+      dpLogs: [...logs],
+      zSearch: {
+        text: text.split(''),
+        pattern: pattern.split(''),
+        concat: concatStr.split(''),
+        zArray: [...z],
+        l: lPos,
+        r: rPos
+      }
+    });
+  };
+
+  let left = 0, right = 0;
+  pushStep(0, 0, 0);
+
+  for (let i = 1; i < N; i++) {
+    if (i > right) {
+      left = right = i;
+      while (right < N && concatStr[right] === concatStr[right - left]) {
+        right++;
+      }
+      z[i] = right - left;
+      right--;
+    } else {
+      let k = i - left;
+      if (z[k] < right - i + 1) {
+        z[i] = z[k];
+      } else {
+        left = i;
+        while (right < N && concatStr[right] === concatStr[right - left]) {
+          right++;
+        }
+        z[i] = right - left;
+        right--;
+      }
+    }
+    pushStep(i, left, Math.max(0, right));
+    
+    // Log matches
+    if (z[i] === pattern.length) {
+      logs.push(`----------------------------------------`);
+      logs.push(`Pattern Found at index ${i - pattern.length - 1}`);
+      logs.push(`----------------------------------------`);
+      pushStep(i, left, Math.max(0, right)); // Snapshot with log
+    }
+  }
+
+  return steps;
+}
+
+function boyerMooreMajoritySteps(): DPStep[] {
+  const A = [1, 3, 3, 2, 1, 1, 1];
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (idx: number, candidate: number | null) => {
+    steps.push({
+      table: [],
+      current: [idx],
+      is2D: false,
+      dpLogs: [...logs],
+      majorityVote: {
+        A: [...A],
+        candidate: candidate
+      }
+    });
+  };
+
+  let candidate = A[0];
+  let count = 1;
+
+  pushStep(0, candidate);
+
+  for (let i = 1; i < A.length; i++) {
+    if (count === 0) {
+      logs.push(`Wrong assumption in majority element`);
+      candidate = A[i];
+      count = 1;
+      logs.push(`New assumed majority element! Count : 1`);
+    } else if (candidate === A[i]) {
+      count++;
+      logs.push(`Same as assumed majority element! Count : ${count}`);
+    } else {
+      count--;
+      logs.push(`Not same as assumed majority element! Count : ${count}`);
+    }
+    pushStep(i, candidate);
+  }
+
+  logs.push(`Finally assumed majority element ${candidate}`);
+  logs.push(`------------------------------------------------`);
+  pushStep(-1, candidate);
+
+  logs.push(`Verify majority element ${candidate}`);
+  let verifyCount = 0;
+  for (let i = 0; i < A.length; i++) {
+    if (A[i] === candidate) verifyCount++;
+  }
+  logs.push(`   Count of our assumed majority element ${verifyCount}`);
+  
+  if (verifyCount > Math.floor(A.length / 2)) {
+    logs.push(`Our assumption was correct!`);
+    logs.push(`Majority element is ${candidate}`);
+  } else {
+    logs.push(`Our assumption was wrong!`);
+    logs.push(`No majority element found`);
+  }
+  pushStep(-1, candidate);
+
+  return steps;
+}
+
+function jobSchedulingSteps(): DPStep[] {
+  const N = 5;
+  const sortedIds = ['a', 'c', 'd', 'b', 'e'];
+  const sortedDeadlines = [2, 2, 1, 1, 3];
+  const sortedProfits = [100, 27, 25, 19, 15];
+  
+  const schedule = Array(N).fill("-");
+  const slot = Array(N).fill(-1);
+  
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (actIdx?: number, actSlot?: number) => {
+    steps.push({
+      table: [],
+      current: [-1],
+      is2D: false,
+      dpLogs: [...logs],
+      jobScheduling: {
+        schedule: [...schedule],
+        jobIds: [...sortedIds],
+        deadlines: [...sortedDeadlines],
+        profits: [...sortedProfits],
+        activeIdx: actIdx,
+        activeSlot: actSlot
+      }
+    });
+  };
+
+  logs.push("Initialize schedule with empty slots '-'.");
+  pushStep();
+
+  for (let i = 0; i < N; i++) {
+    logs.push(`Pick job ${sortedIds[i]} with profit ${sortedProfits[i]} and deadline ${sortedDeadlines[i]}`);
+    pushStep(i);
+    let scheduled = false;
+    const limit = Math.min(N, sortedDeadlines[i]);
+    for (let j = limit - 1; j >= 0; j--) {
+      pushStep(i, j); // highlight slot j currently being checked
+      if (slot[j] === -1) {
+        slot[j] = i;
+        schedule[j] = sortedIds[i];
+        logs.push(`Scheduled job ${sortedIds[i]} at slot ${j}`);
+        pushStep(i, j);
+        scheduled = true;
+        break;
+      }
+    }
+    if (!scheduled) {
+      logs.push(`Could not schedule job ${sortedIds[i]} (no available slots before deadline).`);
+    }
+  }
+
+  logs.push("Job scheduling complete.");
+  pushStep();
+  return steps;
+}
+
+function slidingWindowSteps(): DPStep[] {
+  const D = [4, 2, 4, -4, -1, -4, 2, 2, -4, 0, -4, 4, -3, -3, -4, 1, -3, 0, -1, 0];
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (l: number, r: number, maxVal: number) => {
+    steps.push({
+      table: [...D],
+      current: [r],
+      is2D: false,
+      dpLogs: [...logs],
+      slidingWindow: { l, r, max: maxVal }
+    });
+  };
+
+  let sum = D[0] + D[1] + D[2];
+  let max = sum;
+  logs.push(`sum = ${sum}`);
+  pushStep(0, 2, max); // Initially window is 0 to 2
+
+  for (let i = 3; i < D.length; i++) {
+    sum += D[i] - D[i - 3];
+    logs.push(`sum = ${sum}`);
+    if (max < sum) max = sum;
+    pushStep(i - 2, i, max);
+  }
+
+  logs.push(`max = ${max}`);
+  pushStep(D.length - 3, D.length - 1, max);
+
+  return steps;
+}
+
 
 const FLOYD_INF = 999;
 
@@ -568,29 +982,101 @@ function floydWarshallSteps(): DPStep[] {
 }
 
 function maxSumPathSteps(): DPStep[] {
-  const tri = [[3], [7, 4], [2, 4, 6], [8, 5, 9, 3], [1, 6, 7, 4, 2]];
-  const n = tri.length;
-  const dp: number[][] = tri.map(r => [...r]);
+  const D = [
+    [2, 1, 4, 5, 5],
+    [2, 2, 4, 3, 2],
+    [5, 3, 4, 4, 2],
+    [3, 5, 3, 1, 2],
+    [4, 2, 5, 1, 5]
+  ];
+  const N = 5;
+  const M = 5;
+  const DP: number[][] = Array.from({ length: N }, () => Array(M).fill(0));
+  
+  const logs: string[] = [];
   const steps: DPStep[] = [];
-  // Pad to make rectangular
-  const maxW = n;
-  const table: number[][] = Array.from({ length: n }, (_, i) => {
-    const row = Array(maxW).fill(0);
-    for (let j = 0; j <= i; j++) row[j] = dp[i][j];
-    return row;
-  });
-  steps.push({ table: table.map(r => [...r]), current: [n - 1, 0], is2D: true });
-  for (let i = n - 2; i >= 0; i--) {
-    for (let j = 0; j <= i; j++) {
-      dp[i][j] += Math.max(dp[i + 1][j], dp[i + 1][j + 1]);
-      const t2: number[][] = Array.from({ length: n }, (_, ii) => {
-        const row = Array(maxW).fill(0);
-        for (let jj = 0; jj <= ii; jj++) row[jj] = dp[ii][jj];
-        return row;
-      });
-      steps.push({ table: t2, current: [i, j], is2D: true });
+  const labels = Array.from({ length: 5 }, (_, i) => String(i));
+  
+  const pushStep = (i: number, j: number) => {
+    steps.push({
+      table: DP.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: labels, cols: labels },
+      dpLogs: [...logs],
+      maxSumPath: { grid: D }
+    });
+  };
+
+  logs.push("Finding maximum sum path from top-left to bottom-right");
+  pushStep(-1, -1);
+
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      if (i === 0 && j === 0) {
+        DP[i][j] = D[i][j];
+        logs.push(`DP[0][0] = ${D[i][j]}`);
+      } else if (i === 0) {
+        let prev = DP[i][j - 1];
+        DP[i][j] = prev + D[i][j];
+        logs.push(`i=0: DP[${i}][${j}] = DP[${i}][${j-1}] + D[${i}][${j}] = ${prev} + ${D[i][j]} = ${DP[i][j]}`);
+      } else if (j === 0) {
+        let prev = DP[i - 1][j];
+        DP[i][j] = prev + D[i][j];
+        logs.push(`j=0: DP[${i}][${j}] = DP[${i-1}][${j}] + D[${i}][${j}] = ${prev} + ${D[i][j]} = ${DP[i][j]}`);
+      } else {
+        let top = DP[i - 1][j];
+        let left = DP[i][j - 1];
+        let maxVal = Math.max(top, left);
+        DP[i][j] = maxVal + D[i][j];
+        logs.push(`DP[${i}][${j}] = max(DP[${i-1}][${j}], DP[${i}][${j-1}]) + D[${i}][${j}] = max(${top}, ${left}) + ${D[i][j]} = ${DP[i][j]}`);
+      }
+      pushStep(i, j);
     }
   }
+  logs.push(`Maximum path sum is ${DP[N - 1][M - 1]}`);
+  pushStep(N - 1, M - 1);
+  return steps;
+}
+
+function maxSubarraySteps(): DPStep[] {
+  const arr = [-2, -3, 4, -1, -2, 1, 5, -3];
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  const pushStep = (i: number) => {
+    steps.push({
+      table: [...arr],
+      current: [i],
+      is2D: false,
+      dpLogs: [...logs]
+    });
+  };
+
+  let maxSoFar = 0;
+  let maxEndingHere = 0;
+
+  for (let i = 0; i < arr.length; i++) {
+    pushStep(i);
+    logs.push(`${maxEndingHere} + ${arr[i]}`);
+    maxEndingHere += arr[i];
+    logs.push(`-> ${maxEndingHere}`);
+    
+    if (maxEndingHere < 0) {
+      logs.push("maxEndingHere is negative, set to 0");
+      maxEndingHere = 0;
+    }
+
+    if (maxSoFar < maxEndingHere) {
+      logs.push(`maxSoFar < maxEndingHere, setting maxSoFar to maxEndingHere (${maxEndingHere})`);
+      maxSoFar = maxEndingHere;
+    }
+    pushStep(i);
+  }
+
+  logs.push(`Maximum Subarray's Sum is: ${maxSoFar}`);
+  pushStep(-1);
+
   return steps;
 }
 
@@ -646,8 +1132,8 @@ function freivaldsSteps(): DPStep[] {
 function getSteps(name: string): DPStep[] {
   if (name.includes("Fibonacci")) return fibSteps(14);
   if (name.includes("Catalan")) return catalanSteps(10);
-  if (name.includes("Factorial")) return factorialSteps(10);
-  if (name.includes("Pascal")) return pascalSteps(8);
+  if (name.includes("Factorial")) return factorialSteps(14);
+  if (name.includes("Pascal")) return pascalSteps(9);
   if (name.includes("Knapsack")) return knapsackSteps();
   if (name.includes("Longest Common Sub")) return lcsSteps();
   if (name.includes("Longest Increasing")) return lisSteps();
@@ -658,8 +1144,15 @@ function getSteps(name: string): DPStep[] {
   if (name.includes("Ugly")) return uglySteps(20);
   if (name.includes("Floyd-Warshall")) return floydWarshallSteps();
   if (name.includes("Maximum Sum Path")) return maxSumPathSteps();
+  if (name.includes("Maximum Subarray")) return maxSubarraySteps();
   if (name.includes("Miller-Rabin")) return millerRabinSteps();
   if (name.includes("Freivalds")) return freivaldsSteps();
+  if (name.includes("Sieve")) return sieveSteps(30);
+  if (name.includes("Sliding Window")) return slidingWindowSteps();
+  if (name.includes("Ugly")) return uglySteps(15);
+  if (name.includes("Z String")) return zSearchSteps();
+  if (name.includes("Boyer")) return boyerMooreMajoritySteps();
+  if (name.includes("Job Scheduling")) return jobSchedulingSteps();
   return fibSteps(14);
 }
 
@@ -878,7 +1371,7 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
             <div className="text-[10px] text-muted-foreground mb-2">
               {isEditDist ? "Distance Table" : "Array2DTracer"}
             </div>
-            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-auto max-h-[min(220px,45vh)]">
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-auto flex-1 h-full min-h-[200px]">
               <table className="border-collapse mx-auto">
                 {labels?.cols && (
                   <thead>
@@ -964,7 +1457,7 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
         <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
           <div className="shrink-0">
             <div className="text-[10px] text-muted-foreground mb-2">Knapsack Table</div>
-            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto max-h-[min(200px,38vh)]">
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
               <table className="border-collapse mx-auto">
                 {labels?.cols && (
                   <thead>
@@ -1189,7 +1682,7 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
           {/* Memo Table Panel */}
           <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
             <div className="text-[10px] text-muted-foreground mb-2">Memo Table</div>
-            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto max-h-[min(200px,38vh)]">
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
               <table className="border-collapse mx-auto">
                 {labels?.cols && (
                   <thead>
@@ -1258,6 +1751,417 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
             </div>
           </div>
 
+          <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
+        </div>
+      );
+    }
+
+    const isLps = algorithmName.includes("Longest Palindromic") && currentStep.lps;
+    if (isLps) {
+      const { str, hl1 } = currentStep.lps!;
+      const logLines = currentStep.dpLogs ?? [];
+      const maxRows = table.length;
+      const maxCols = table[0]?.length ?? 0;
+      
+      const hlBg = "hsl(224, 85%, 48%)";
+      const hlBorder = "hsl(224, 85%, 62%)";
+      const pendingBg = "hsl(150, 12%, 12%)";
+      const borderNormal = "hsl(150, 10%, 26%)";
+      const textNormal = "hsl(150, 20%, 88%)";
+      const textHl = "hsl(210, 40%, 8%)";
+
+      return (
+        <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
+          {/* Input Text Panel */}
+          <div className="w-full shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Input Text</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+              <div className="flex flex-col gap-1 min-w-min mx-auto">
+                <div className="flex justify-center gap-1">
+                  {str.map((_, idx) => (
+                    <div key={`s-idx-${idx}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">{idx}</div>
+                  ))}
+                </div>
+                <div className="flex justify-center gap-1">
+                  {str.map((char, idx) => {
+                    const isHl = hl1.includes(idx);
+                    return (
+                      <div
+                        key={`s-c-${idx}`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold border transition-colors"
+                        style={{
+                          background: isHl ? hlBg : pendingBg,
+                          borderColor: isHl ? hlBorder : borderNormal,
+                          color: isHl ? textHl : textNormal,
+                        }}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Matrix Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Matrix</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.slice(0, maxRows).map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.slice(0, maxCols).map((val, j) => {
+                        const isMatchCell = hl1.includes(i) && hl1.includes(j);
+                        let cellBg = "hsl(150, 15%, 10%)";
+                        let cellColor = "hsl(150, 20%, 70%)";
+                        let cellBorder = "hsl(150, 15%, 20%)";
+
+                        let displayVal: string | number = val;
+
+                        if (i > j) {
+                          cellBg = "transparent";
+                          cellBorder = "transparent";
+                          displayVal = "";
+                        } else if (i === cr && j === cc) {
+                          cellBg = "hsl(145, 60%, 45%)";
+                          cellColor = "hsl(150, 30%, 4%)";
+                          cellBorder = "hsl(145, 60%, 45%)";
+                        } else if (isMatchCell && i !== j) {
+                          cellBg = hlBg;
+                          cellColor = textHl;
+                          cellBorder = hlBorder;
+                        }
+
+                        if (i <= j && displayVal === 0) displayVal = "";
+
+                        return (
+                          <td
+                            key={j}
+                            className="w-7 h-7 text-center text-[10px] font-mono transition-all duration-100"
+                            style={{
+                              background: cellBg,
+                              color: cellColor,
+                              border: i > j ? "none" : `1px solid ${cellBorder}`
+                            }}
+                          >
+                            {displayVal}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LogTracer Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+            <div className="min-h-20 max-h-36 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+              {logLines.length > 0 ? (
+                logLines.slice(-12).map((line, index) => (
+                  <div key={`${index}-${line.slice(0, 40)}`}>{line}</div>
+                ))
+              ) : (
+                <div>Press play to construct the matrix and find LPS.</div>
+              )}
+            </div>
+          </div>
+
+          <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
+        </div>
+      );
+    }
+
+    const isMaxSumPath = algorithmName.includes("Maximum Sum Path") && currentStep.maxSumPath;
+    if (isMaxSumPath) {
+      const { grid } = currentStep.maxSumPath!;
+      const logLines = currentStep.dpLogs ?? [];
+      const maxRows = table.length;
+      const maxCols = table[0]?.length ?? 0;
+      
+      const hlBg = "hsl(145, 60%, 45%)";
+      const hlBorder = "hsl(145, 60%, 45%)";
+      const pendingBg = "hsl(150, 15%, 10%)";
+      const doneBg = "hsl(150, 20%, 15%)";
+      const borderNormal = "hsl(150, 15%, 20%)";
+      
+      return (
+        <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
+          {/* Array2DTracer Panel */}
+          <div className="w-full shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Array2DTracer</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {grid.map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.map((val, j) => {
+                        const isActive = i === cr && j === cc;
+                        const isDone = i < cr || (i === cr && j < cc!);
+                        
+                        return (
+                          <td
+                            key={j}
+                            className="w-7 h-7 text-center text-[10px] font-mono transition-all duration-100"
+                            style={{
+                              background: isActive ? hlBg : isDone ? doneBg : "hsl(150, 15%, 10%)",
+                              color: isActive ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)",
+                              border: `1px solid ${isActive ? hlBorder : borderNormal}`
+                            }}
+                          >
+                            {val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Results Table Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Results Table</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.slice(0, maxRows).map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.slice(0, maxCols).map((val, j) => {
+                        const isActive = i === cr && j === cc;
+                        const isDone = i < cr || (i === cr && j < cc!);
+                        
+                        return (
+                          <td
+                            key={j}
+                            className="w-7 h-7 text-center text-[10px] font-mono transition-all duration-100"
+                            style={{
+                              background: isActive ? hlBg : isDone ? doneBg : pendingBg,
+                              color: isActive ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)",
+                              border: `1px solid ${isActive ? hlBorder : borderNormal}`
+                            }}
+                          >
+                            {val === 0 && !isDone && !isActive ? "" : val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LogTracer Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+            <div className="min-h-20 max-h-36 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+              {logLines.length > 0 ? (
+                logLines.slice(-12).map((line, index) => (
+                  <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+                ))
+              ) : (
+                <div>Press play to calculate maximum sum path.</div>
+              )}
+            </div>
+          </div>
+
+          <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
+        </div>
+      );
+    }
+
+    const isScs = algorithmName.includes("Shortest Common") && currentStep.scs;
+    if (isScs) {
+      const { str1, str2 } = currentStep.scs!;
+      const logLines = currentStep.dpLogs ?? [];
+      const maxRows = table.length;
+      const maxCols = table[0]?.length ?? 0;
+      const hlBg = "hsl(145, 60%, 45%)";
+      const pendingBg = "hsl(150, 15%, 10%)";
+      const doneBg = "hsl(150, 20%, 15%)";
+      
+      return (
+        <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
+          {/* String 1 Panel */}
+          <div className="w-full shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">String 1</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <div className="flex justify-center flex-col items-center">
+                <div className="flex gap-1">
+                  {str1.map((_, idx) => <div key={idx} className="w-8 text-[9px] text-center text-muted-foreground font-mono">{idx}</div>)}
+                </div>
+                <div className="flex gap-1 mt-1">
+                  {str1.map((char, idx) => {
+                    const isActive = cr > 0 && idx === cr - 1;
+                    return (
+                      <div key={idx} className="w-8 h-8 flex items-center justify-center border font-mono text-[10px] transition-colors" style={{ background: isActive ? hlBg : pendingBg, borderColor: isActive ? hlBg : "hsl(150, 15%, 20%)", color: isActive ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)" }}>{char}</div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* String 2 Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">String 2</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <div className="flex justify-center flex-col items-center">
+                <div className="flex gap-1">
+                  {str2.map((_, idx) => <div key={idx} className="w-8 text-[9px] text-center text-muted-foreground font-mono">{idx}</div>)}
+                </div>
+                <div className="flex gap-1 mt-1">
+                  {str2.map((char, idx) => {
+                    const isActive = cc > 0 && idx === cc - 1;
+                    return (
+                      <div key={idx} className="w-8 h-8 flex items-center justify-center border font-mono text-[10px] transition-colors" style={{ background: isActive ? hlBg : pendingBg, borderColor: isActive ? hlBg : "hsl(150, 15%, 20%)", color: isActive ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)" }}>{char}</div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Memo Table Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Memo Table</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.slice(0, maxRows).map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.slice(0, maxCols).map((val, j) => {
+                        const isActive = i === cr && j === cc;
+                        const isDone = i < cr || (i === cr && j < cc!);
+                        return (
+                          <td key={j} className="w-6 h-6 text-center text-[9px] font-mono border transition-colors" style={{ background: isActive ? hlBg : isDone ? doneBg : pendingBg, borderColor: isActive ? hlBg : "hsl(150, 15%, 20%)", color: "hsl(150, 20%, 80%)" }}>
+                            {val === 0 && !isDone && !isActive ? "" : val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LogTracer Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+            <div className="min-h-20 max-h-36 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+              {logLines.length > 0 ? logLines.slice(-12).map((line, index) => <div key={`${index}-${line.slice(0,40)}`}>{line}</div>) : <div>Press play to calculate sequence.</div>}
+            </div>
+          </div>
+          <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
+        </div>
+      );
+    }
+
+    const isPascal = algorithmName.includes("Pascal") && currentStep.pascal;
+    if (isPascal) {
+      const maxRows = table.length;
+      const maxCols = table[0]?.length ?? 0;
+      const hlBg = "hsl(145, 60%, 45%)";
+      const hlBorder = "hsl(145, 60%, 45%)";
+      const doneBg = "hsl(150, 20%, 15%)";
+      const pendingBg = "hsl(150, 15%, 10%)";
+      const borderNormal = "hsl(150, 15%, 20%)";
+
+      return (
+        <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
+          <div className="w-full shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Pascal's Triangle</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.slice(0, maxRows).map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.slice(0, maxCols).map((val, j) => {
+                        const isActive = i === cr && j === cc;
+                        const isDone = i < cr || (i === cr && j < cc!);
+                        
+                        return (
+                          <td
+                            key={j}
+                            className="w-7 h-7 text-center text-[10px] font-mono transition-all duration-100"
+                            style={{
+                              background: isActive ? hlBg : isDone ? doneBg : pendingBg,
+                              color: isActive ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)",
+                              border: `1px solid ${isActive ? hlBorder : borderNormal}`
+                            }}
+                          >
+                            {j > i ? "" : val === 0 && !isActive ? "" : val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
           <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
         </div>
       );
@@ -1442,41 +2346,66 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
     );
   }
 
-  const isLis = algorithmName.includes("Longest Increasing") && currentStep.dpLogs;
-  if (isLis) {
+  const isArrayTrace = (algorithmName.includes("Longest Increasing") || algorithmName.includes("Maximum Subarray") || algorithmName.includes("Sliding Window")) && currentStep.dpLogs;
+  if (isArrayTrace) {
+    const isSliding = algorithmName.includes("Sliding");
+    const sw = currentStep.slidingWindow;
     const [iPos, jPos] = currentStep.current;
+    
+    // Exact mimic of Array1DTracer from visualizer
     const minW = Math.max(table.length * 32, 160);
-    const hiBg = "hsl(224, 85%, 48%)";
-    const hiBorder = "hsl(224, 85%, 62%)";
-    const jBg = "hsl(145, 60%, 45%)";
-    const jBorder = "hsl(145, 60%, 55%)";
-    const pendingBg = "hsl(150, 12%, 12%)";
+    const hiBg = "hsl(224, 76%, 48%)"; // blue for active/window
+    const jBg = "hsl(145, 60%, 45%)";  // green for j
+    const pendingBg = "hsl(215, 10%, 18%)"; 
+    const borderDark = "hsl(215, 10%, 26%)"; // border separating cells
 
     return (
       <div className="w-full h-full flex flex-col min-h-0">
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
-          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto min-h-[min(200px,38vh)] flex items-center">
-            <div className="flex flex-col gap-1 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
-              <div className="flex justify-center gap-2">
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 overflow-x-auto min-h-[min(200px,38vh)] flex items-start pt-6">
+            <div className="flex flex-col min-w-min" style={{ minWidth: `${minW}px` }}>
+              <div className="flex justify-start mb-1">
                 {table.map((_, i) => (
-                  <div key={`lis-idx-${i}`} className="w-8 shrink-0 text-center text-[10px] text-muted-foreground font-mono">
+                  <div key={`arr-idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
                     {i}
                   </div>
                 ))}
               </div>
-              <div className="flex justify-center gap-2">
+              <div className="flex justify-start">
                 {table.map((val, i) => {
-                  const isI = i === iPos;
-                  const isJ = i === jPos;
+                  let isI = false;
+                  let isJ = false;
+                  
+                  if (isSliding && sw) {
+                    isI = i >= sw.l && i <= sw.r;
+                  } else {
+                    isI = i === iPos;
+                    isJ = i === jPos;
+                  }
+
+                  let cellBg = pendingBg;
+                  let color = "hsl(150, 20%, 88%)";
+
+                  if (isI) {
+                    cellBg = hiBg;
+                    color = "white";
+                  } else if (isJ) {
+                    cellBg = jBg;
+                    color = "white";
+                  }
+
                   return (
                     <div
-                      key={`lis-cell-${i}`}
-                      className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold border transition-colors"
+                      key={`arr-cell-${i}`}
+                      className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors"
                       style={{
-                        background: isI ? hiBg : isJ ? jBg : pendingBg,
-                        borderColor: isI ? hiBorder : isJ ? jBorder : "hsl(150, 10%, 26%)",
-                        color: isI || isJ ? "hsl(210, 40%, 8%)" : "hsl(150, 20%, 88%)",
+                        background: cellBg,
+                        color,
+                        borderTop: `1px solid ${borderDark}`,
+                        borderBottom: `1px solid ${borderDark}`,
+                        borderLeft: `1px solid ${borderDark}`,
+                        borderRight: i === table.length - 1 ? `1px solid ${borderDark}` : 'none'
                       }}
                     >
                       {val}
@@ -1496,8 +2425,443 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
                 <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
               ))
             ) : (
-              <div>Press play to construct LIS.</div>
+              <div>Press play to start {algorithmName}.</div>
             )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isSieve = algorithmName.includes("Sieve") && currentStep.sieve;
+  if (isSieve) {
+    const { marks, p, c } = currentStep.sieve!;
+    const minW = Math.max(table.length * 36, 160);
+    const hlBg = "hsl(145, 60%, 45%)"; // prime color green-ish
+    const activeBg = "hsl(45, 92%, 52%)"; // current operating multiple
+    const compBg = "hsl(224, 76%, 48%)"; // algorithm-visualizer solid blue
+    const pendingBg = "hsl(215, 15%, 15%)"; // dark grey for unvisited/prime
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Sieve</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 overflow-x-auto min-h-[min(200px,38vh)] flex items-start pt-6">
+            <div className="flex flex-col gap-1 min-w-min" style={{ minWidth: `${minW}px` }}>
+              <div className="flex justify-start gap-[2px]">
+                {table.map((_, i) => (
+                  <div key={`sieve-idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                    {i}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-start gap-[2px]">
+                {table.map((val, i) => {
+                  const num = val;
+                  const isMarked = marks[num];
+                  const isCurrentPrime = num === p;
+                  const isCurrentMultiple = num === c;
+                  
+                  let cellBg = pendingBg;
+                  let color = "hsl(150, 20%, 88%)";
+
+                  if (isCurrentMultiple) {
+                    cellBg = activeBg;
+                    color = "hsl(210, 40%, 8%)";
+                  } else if (isCurrentPrime) {
+                    cellBg = hlBg;
+                    color = "hsl(210, 40%, 8%)";
+                  } else if (isMarked) {
+                    cellBg = compBg;
+                    color = "white";
+                  }
+
+                  return (
+                    <div
+                      key={`sieve-cell-${i}`}
+                      className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors rounded-[2px]"
+                      style={{
+                        background: cellBg,
+                        color,
+                      }}
+                    >
+                      {val}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-12).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to start Sieve of Eratosthenes.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isUgly = algorithmName.includes("Ugly") && currentStep.ugly;
+  if (isUgly) {
+    const { M, I } = currentStep.ugly!;
+    const hiBg = "hsl(145, 60%, 45%)"; // prime color green-ish
+    const pendingBg = "hsl(215, 15%, 15%)"; 
+    const borderDark = "hsl(215, 10%, 26%)";
+
+    const renderArray = (arr: (number|string)[], label: string, activeIdx?: number) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3">
+        <div className="text-[10px] text-muted-foreground mb-2">{label}</div>
+        <div className="flex items-center min-h-[50px] sm:min-h-[100px] justify-center overflow-x-auto">
+          <div className="flex flex-col min-w-min">
+            <div className="flex justify-start mb-1">
+              {arr.map((_, i) => (
+                <div key={`idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {arr.map((val, i) => (
+                <div
+                  key={`cell-${i}`}
+                  className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors"
+                  style={{
+                    background: i === activeIdx ? hiBg : pendingBg,
+                    color: i === activeIdx ? "hsl(210, 40%, 8%)" : "hsl(150, 20%, 88%)",
+                    borderTop: `1px solid ${borderDark}`,
+                    borderBottom: `1px solid ${borderDark}`,
+                    borderLeft: `1px solid ${borderDark}`,
+                    borderRight: i === arr.length - 1 ? `1px solid ${borderDark}` : 'none'
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {renderArray(table, "Ugly Numbers", cur)}
+          
+          <div className="mt-2">
+            {renderArray(M, "Multiples of 2, 3, 5")}
+          </div>
+          
+          <div className="mt-2">
+            {renderArray(I, "Iterators I0, I1, I2")}
+          </div>
+
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to generate ugly numbers.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isZSearch = algorithmName.includes("Z String") && currentStep.zSearch;
+  if (isZSearch) {
+    const { text, pattern, concat, zArray, l, r } = currentStep.zSearch!;
+    const activeBg = "hsl(145, 60%, 45%)"; // active index highlight
+    const lBg = "hsl(45, 92%, 52%)"; // left bound highlight
+    const rBg = "hsl(224, 76%, 48%)"; // right bound highlight
+    const pendingBg = "hsl(215, 15%, 15%)";
+    const borderDark = "hsl(215, 10%, 26%)";
+
+    const renderArray = (arr: (string|number)[], label: string, highlightLogic: (idx: number) => string | undefined) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3">
+        <div className="text-[10px] text-muted-foreground mb-2">{label}</div>
+        <div className="flex items-center justify-start overflow-x-auto">
+          <div className="flex flex-col min-w-min mx-auto">
+            <div className="flex justify-start mb-1">
+              {arr.map((_, i) => (
+                <div key={`z-idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {arr.map((val, i) => {
+                const bgOverride = highlightLogic(i);
+                return (
+                  <div
+                    key={`z-cell-${i}`}
+                    className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors"
+                    style={{
+                      background: bgOverride || pendingBg,
+                      color: bgOverride ? "hsl(210, 40%, 8%)" : "hsl(150, 20%, 88%)",
+                      borderTop: `1px solid ${borderDark}`,
+                      borderBottom: `1px solid ${borderDark}`,
+                      borderLeft: `1px solid ${borderDark}`,
+                      borderRight: i === arr.length - 1 ? `1px solid ${borderDark}` : 'none'
+                    }}
+                  >
+                    {val}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {renderArray(text, "text", () => undefined)}
+          <div className="mt-2">{renderArray(pattern, "pattern", () => undefined)}</div>
+          <div className="mt-2">
+            {renderArray(concat, "concatenated string", (i) => {
+              if (i === cur) return activeBg;
+              if (cur > 0 && i >= l && i <= r) return rBg; // highlight matched block within z-box
+              return undefined;
+            })}
+          </div>
+          <div className="mt-2">
+            {renderArray(zArray, "zArray", (i) => i === cur ? activeBg : undefined)}
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to calculate Z-array.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isMajorityVote = algorithmName.includes("Boyer") && currentStep.majorityVote;
+  if (isMajorityVote) {
+    const { A, candidate } = currentStep.majorityVote!;
+    // algorithm-visualizer majority vote pink highlight
+    const pinkBg = "hsl(330, 80%, 45%)";
+    const pendingBg = "hsl(215, 10%, 18%)";
+    const borderDark = "hsl(215, 10%, 26%)";
+    const minW = Math.max(A.length * 32, 160);
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4">List of element</div>
+            <div className="flex items-center min-h-[min(200px,38vh)] justify-center overflow-x-auto">
+              <div className="flex flex-col min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+                <div className="flex justify-start mb-1">
+                  {A.map((_, i) => (
+                    <div key={`bm-idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {A.map((val, i) => {
+                    const isCandidate = val === candidate;
+                    return (
+                      <div
+                        key={`bm-cell-${i}`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors"
+                        style={{
+                          background: isCandidate ? pinkBg : pendingBg,
+                          color: isCandidate ? "white" : "hsl(150, 20%, 88%)",
+                          borderTop: `1px solid ${borderDark}`,
+                          borderBottom: `1px solid ${borderDark}`,
+                          borderLeft: `1px solid ${borderDark}`,
+                          borderRight: i === A.length - 1 ? `1px solid ${borderDark}` : 'none'
+                        }}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">Console</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90 leading-tight">
+            {logLines.length > 0 ? (
+              logLines.map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line}</div>
+              ))
+            ) : (
+              <div>Press play to calculate majority element.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isJobScheduling = algorithmName.includes("Job Scheduling") && currentStep.jobScheduling;
+  if (isJobScheduling) {
+    const { schedule, jobIds, deadlines, profits, activeIdx, activeSlot } = currentStep.jobScheduling!;
+    const activeBg = "hsl(145, 60%, 45%)"; // checking slot (green or active element)
+    const slotBg = "hsl(224, 76%, 48%)"; // blue for schedule checking
+    const pendingBg = "hsl(215, 15%, 15%)";
+    const borderDark = "hsl(215, 10%, 26%)";
+
+    const renderArray = (arr: (string|number)[], label: string, highlightLogic: (idx: number) => string | undefined) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3">
+        <div className="text-[10px] text-muted-foreground mb-2">{label}</div>
+        <div className="flex items-center min-h-[50px] sm:min-h-[100px] justify-center overflow-x-auto">
+          <div className="flex flex-col min-w-min mx-auto">
+            <div className="flex justify-start mb-1">
+              {arr.map((_, i) => (
+                <div key={`js-idx-${i}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {arr.map((val, i) => {
+                const bgOverride = highlightLogic(i);
+                return (
+                  <div
+                    key={`js-cell-${i}`}
+                    className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold transition-colors"
+                    style={{
+                      background: bgOverride || pendingBg,
+                      color: bgOverride ? "white" : "hsl(150, 20%, 88%)",
+                      borderTop: `1px solid ${borderDark}`,
+                      borderBottom: `1px solid ${borderDark}`,
+                      borderLeft: `1px solid ${borderDark}`,
+                      borderRight: i === arr.length - 1 ? `1px solid ${borderDark}` : 'none'
+                    }}
+                  >
+                    {val}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {renderArray(schedule, "Schedule", (i) => i === activeSlot ? slotBg : undefined)}
+          <div className="mt-2">{renderArray(jobIds, "Job Ids", (i) => i === activeIdx ? activeBg : undefined)}</div>
+          <div className="mt-2">{renderArray(deadlines, "Deadlines", (i) => i === activeIdx ? activeBg : undefined)}</div>
+          <div className="mt-2">{renderArray(profits, "Profit", (i) => i === activeIdx ? activeBg : undefined)}</div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to schedule jobs.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isSequence = algorithmName.includes("Factorial");
+  if (isSequence) {
+    const minW = Math.max(table.length * 40, 160);
+    const hiBg = "hsl(145, 60%, 45%)";
+    const hiBorder = "hsl(145, 60%, 45%)";
+    const pendingBg = "hsl(150, 15%, 10%)";
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Sequence</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto min-h-[min(200px,38vh)] flex items-center h-full">
+            <div className="flex flex-col gap-1 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+              <div className="flex justify-center gap-1">
+                {table.map((_, i) => (
+                  <div key={`seq-idx-${i}`} className="min-w-[32px] px-1 shrink-0 text-center text-[10px] text-muted-foreground font-mono">
+                    {i}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1">
+                {table.map((val, i) => {
+                  const isCur = i === cur;
+                  return (
+                    <div
+                      key={`seq-cell-${i}`}
+                      className="min-w-[32px] px-1 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold border transition-colors"
+                      style={{
+                        background: isCur ? hiBg : pendingBg,
+                        borderColor: isCur ? hiBorder : "hsl(150, 15%, 20%)",
+                        color: isCur ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 70%)",
+                      }}
+                    >
+                      {val}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
