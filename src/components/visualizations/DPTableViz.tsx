@@ -27,6 +27,13 @@ type DPStep = {
     weights: number[];
     capacity: number;
   };
+  /** LCS: string arrays, highlight logic for both strings */
+  lcs?: {
+    str1: string[];
+    str2: string[];
+    hl1: number[];
+    hl2: number[];
+  };
 };
 
 /** D[0]=D[1]=1, D[i]=D[i-1]+D[i-2]; indices 0..lastIndex match algorithm-visualizer "Sequence". */
@@ -184,58 +191,162 @@ function knapsackSteps(): DPStep[] {
 }
 
 function lcsSteps(): DPStep[] {
-  const a = "ABCBDAB";
-  const b = "BDCAB";
+  const a = "AGGTAB";
+  const b = "GXTXAYB";
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  const logs: string[] = [];
   const steps: DPStep[] = [];
+  
+  const pushStep = (i: number, j: number, hl1: number[] = [], hl2: number[] = []) => {
+    steps.push({
+      table: dp.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: ["*", ...a.split("")], cols: ["*", ...b.split("")] },
+      dpLogs: [...logs],
+      lcs: { str1: a.split(""), str2: b.split(""), hl1, hl2 }
+    });
+  };
+
+  pushStep(0, 0);
+
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
-      steps.push({
-        table: dp.map(r => [...r]),
-        current: [i, j],
-        is2D: true,
-        labels: { rows: ["", ...a.split("")], cols: ["", ...b.split("")] }
-      });
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+      pushStep(i, j);
     }
   }
+
+  // Backtracking to find LCS
+  let i = m, j = n;
+  let lcsLength = dp[m][n];
+  const lcsStr: string[] = [];
+  const hl1: number[] = [];
+  const hl2: number[] = [];
+  
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) {
+      lcsStr.unshift(a[i - 1]);
+      hl1.unshift(i - 1);
+      hl2.unshift(j - 1);
+      i--; j--;
+    } else if (dp[i - 1][j] > dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+
+  logs.push(`Longest Common Subsequence Length is ${lcsLength}`);
+  logs.push(`Longest Common Subsequence is ${lcsStr.join("")}`);
+  pushStep(-1, -1, hl1, hl2);
+
   return steps;
 }
 
 function lisSteps(): DPStep[] {
-  const arr = [10, 9, 2, 5, 3, 7, 101, 18, 4, 6, 8];
-  const dp = Array(arr.length).fill(1);
+  const A = [2, 5, 7, 7, 3, 9, 3, 4, 0, 3];
+  const LIS = Array(A.length).fill(1);
+  const logs: string[] = [];
   const steps: DPStep[] = [];
-  for (let i = 1; i < arr.length; i++) {
+  
+  const pushStep = (i: number, j?: number) => {
+    steps.push({
+      table: [...A],
+      current: j !== undefined ? [i, j] : [i],
+      is2D: false,
+      dpLogs: [...logs]
+    });
+  };
+
+  logs.push("Calculating Longest Increasing Subsequence values in bottom up manner");
+  pushStep(0);
+  
+  for (let i = 1; i < A.length; i++) {
+    logs.push(`LIS[${i}] = ${LIS[i]}`);
+    pushStep(i);
     for (let j = 0; j < i; j++) {
-      if (arr[j] < arr[i]) dp[i] = Math.max(dp[i], dp[j] + 1);
+      if (A[i] > A[j] && LIS[i] < LIS[j] + 1) {
+        LIS[i] = LIS[j] + 1;
+        logs.push(`LIS[${i}] = ${LIS[i]}`);
+      }
+      pushStep(i, j);
     }
-    steps.push({ table: [...dp], current: [i], is2D: false });
   }
+
+  let max = LIS[0];
+  for (let i = 1; i < A.length; i++) {
+    if (LIS[i] > max) max = LIS[i];
+  }
+  logs.push(`Pick maximum of all LIS values`);
+  logs.push(`Max LIS length is ${max}`);
+  pushStep(-1, -1);
+
   return steps;
 }
 
 function editDistSteps(): DPStep[] {
-  const a = "KITTEN";
-  const b = "SITTING";
+  const a = "stack";
+  const b = "racket";
   const m = a.length, n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  // Initialize with -1
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(-1));
   for (let i = 0; i <= m; i++) dp[i][0] = i;
   for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  const logs: string[] = [];
   const steps: DPStep[] = [];
+  const labelsRows = ["*", ...a.split("")];
+  const labelsCols = ["*", ...b.split("")];
+
+  const pushStep = (i: number, j: number) => {
+    steps.push({
+      table: dp.map(r => [...r]),
+      current: [i, j],
+      is2D: true,
+      labels: { rows: labelsRows, cols: labelsCols },
+      dpLogs: [...logs],
+    });
+  };
+
+  const logGrid = () => {
+    logs.push(`   ${labelsCols.join(" ")}`);
+    for (let r = 0; r <= m; r++) {
+      logs.push(`${labelsRows[r]}  ${dp[r].join(",")}`);
+    }
+  };
+
+  logs.push("Initialized DP table");
+  logs.push(`Y-Axis (Top to Bottom): ${a}`);
+  logs.push(`X-Axis (Left to Right): ${b}`);
+  logGrid();
+  pushStep(0, 0);
+
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-      steps.push({
-        table: dp.map(r => [...r]),
-        current: [i, j],
-        is2D: true,
-        labels: { rows: ["", ...a.split("")], cols: ["", ...b.split("")] }
-      });
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1];
+        logs.push(`Matched '${a[i - 1]}', cost 0: table[${i}][${j}] = table[${i - 1}][${j - 1}] = ${dp[i][j]}`);
+      } else {
+        // Substitution, deletion, insertion
+        const sub = dp[i - 1][j - 1];
+        const del = dp[i - 1][j];
+        const ins = dp[i][j - 1];
+        dp[i][j] = Math.min(sub, del, ins) + 1;
+        logs.push(`Mismatch '${a[i - 1]}' vs '${b[j - 1]}', cost 1: table[${i}][${j}] = min(${del}, ${ins}, ${sub}) + 1 = ${dp[i][j]}`);
+      }
+      pushStep(i, j);
     }
   }
+
+  logs.push(`Final edit distance: ${dp[m][n]}`);
+  pushStep(m, n);
+
   return steps;
 }
 
@@ -755,15 +866,18 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
     const [cr, cc] = currentStep.current;
     const labels = currentStep.labels;
     const isIntPart = algorithmName.includes("Integer Partition") && currentStep.dpLogs;
+    const isEditDist = (algorithmName.includes("Edit") || algorithmName.includes("Levenshtein")) && currentStep.dpLogs;
 
-    if (isIntPart) {
+    if (isIntPart || isEditDist) {
       const logLines = currentStep.dpLogs ?? [];
       const maxRows = table.length;
       const maxCols = table[0]?.length ?? 0;
       return (
         <div className="w-full h-full flex flex-col min-h-0">
           <div className="flex-1 min-h-0 flex flex-col">
-            <div className="text-[10px] text-muted-foreground mb-2">Array2DTracer</div>
+            <div className="text-[10px] text-muted-foreground mb-2">
+              {isEditDist ? "Distance Table" : "Array2DTracer"}
+            </div>
             <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-auto max-h-[min(220px,45vh)]">
               <table className="border-collapse mx-auto">
                 {labels?.cols && (
@@ -819,7 +933,7 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
                   <div key={`${index}-${line.slice(0, 40)}`}>{line}</div>
                 ))
               ) : (
-                <div>Press play to build the partition table.</div>
+                <div>Press play to build the table.</div>
               )}
             </div>
           </div>
@@ -988,6 +1102,163 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
           >
             Reset
           </button>
+        </div>
+      );
+    }
+
+    const isLcs = algorithmName.includes("Longest Common Sub") && currentStep.lcs;
+    if (isLcs) {
+      const { str1, str2, hl1, hl2 } = currentStep.lcs!;
+      const logLines = currentStep.dpLogs ?? [];
+      const maxRows = table.length;
+      const maxCols = table[0]?.length ?? 0;
+      
+      const hlBg = "hsl(224, 85%, 48%)";
+      const hlBorder = "hsl(224, 85%, 62%)";
+      const pendingBg = "hsl(150, 12%, 12%)";
+      const borderNormal = "hsl(150, 10%, 26%)";
+      const textNormal = "hsl(150, 20%, 88%)";
+      const textHl = "hsl(210, 40%, 8%)";
+
+      return (
+        <div className="w-full h-full flex flex-col min-h-0 overflow-auto">
+          {/* String 1 Panel */}
+          <div className="w-full shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">String 1</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+              <div className="flex flex-col gap-1 min-w-min mx-auto">
+                <div className="flex justify-center gap-1">
+                  {str1.map((_, idx) => (
+                    <div key={`s1-idx-${idx}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">{idx}</div>
+                  ))}
+                </div>
+                <div className="flex justify-center gap-1">
+                  {str1.map((char, idx) => {
+                    const isHl = hl1.includes(idx);
+                    return (
+                      <div
+                        key={`s1-c-${idx}`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold border transition-colors"
+                        style={{
+                          background: isHl ? hlBg : pendingBg,
+                          borderColor: isHl ? hlBorder : borderNormal,
+                          color: isHl ? textHl : textNormal,
+                        }}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* String 2 Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">String 2</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+              <div className="flex flex-col gap-1 min-w-min mx-auto">
+                <div className="flex justify-center gap-1">
+                  {str2.map((_, idx) => (
+                    <div key={`s2-idx-${idx}`} className="w-8 shrink-0 text-center text-[9px] text-muted-foreground font-mono">{idx}</div>
+                  ))}
+                </div>
+                <div className="flex justify-center gap-1">
+                  {str2.map((char, idx) => {
+                    const isHl = hl2.includes(idx);
+                    return (
+                      <div
+                        key={`s2-c-${idx}`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold border transition-colors"
+                        style={{
+                          background: isHl ? hlBg : pendingBg,
+                          borderColor: isHl ? hlBorder : borderNormal,
+                          color: isHl ? textHl : textNormal,
+                        }}
+                      >
+                        {char}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Memo Table Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">Memo Table</div>
+            <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto max-h-[min(200px,38vh)]">
+              <table className="border-collapse mx-auto">
+                {labels?.cols && (
+                  <thead>
+                    <tr>
+                      <th className="w-6 h-6" />
+                      {labels.cols.slice(0, maxCols).map((c, j) => (
+                        <th key={j} className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.slice(0, maxRows).map((row, i) => (
+                    <tr key={i}>
+                      {labels?.rows && <td className="w-6 h-6 text-[9px] text-muted-foreground font-mono text-center">{labels.rows[i]}</td>}
+                      {row.slice(0, maxCols).map((val, j) => {
+                        const isMatchCell = i > 0 && j > 0 && hl1.includes(i - 1) && hl2.includes(j - 1) && hl1.indexOf(i - 1) === hl2.indexOf(j - 1);
+                        let cellBg = "hsl(150, 15%, 10%)";
+                        let cellColor = "hsl(150, 20%, 70%)";
+                        let cellBorder = "hsl(150, 15%, 20%)";
+
+                        if (i === cr && j === cc) {
+                          cellBg = "hsl(145, 60%, 45%)";
+                          cellColor = "hsl(150, 30%, 4%)";
+                          cellBorder = "hsl(145, 60%, 45%)";
+                        } else if (isMatchCell) {
+                          cellBg = hlBg;
+                          cellColor = textHl;
+                          cellBorder = hlBorder;
+                        } else if (i < cr || (i === cr && j < (cc ?? 0))) {
+                          cellBg = "hsl(150, 20%, 15%)";
+                        }
+
+                        return (
+                          <td
+                            key={j}
+                            className="w-7 h-7 text-center text-[10px] font-mono transition-all duration-100"
+                            style={{
+                              background: cellBg,
+                              color: cellColor,
+                              border: `1px solid ${cellBorder}`
+                            }}
+                          >
+                            {val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* LogTracer Panel */}
+          <div className="w-full border-t border-border/20 pt-3 mt-3 shrink-0">
+            <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+            <div className="min-h-20 max-h-36 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+              {logLines.length > 0 ? (
+                logLines.slice(-12).map((line, index) => (
+                  <div key={`${index}-${line.slice(0, 40)}`}>{line}</div>
+                ))
+              ) : (
+                <div>Press play to construct the memo table and find LCS.</div>
+              )}
+            </div>
+          </div>
+
+          <button onClick={reset} className="mx-auto mt-3 mb-1 text-[10px] text-muted-foreground hover:text-primary transition-colors">Reset</button>
         </div>
       );
     }
@@ -1166,6 +1437,72 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
           className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
         >
           Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  const isLis = algorithmName.includes("Longest Increasing") && currentStep.dpLogs;
+  if (isLis) {
+    const [iPos, jPos] = currentStep.current;
+    const minW = Math.max(table.length * 32, 160);
+    const hiBg = "hsl(224, 85%, 48%)";
+    const hiBorder = "hsl(224, 85%, 62%)";
+    const jBg = "hsl(145, 60%, 45%)";
+    const jBorder = "hsl(145, 60%, 55%)";
+    const pendingBg = "hsl(150, 12%, 12%)";
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto min-h-[min(200px,38vh)] flex items-center">
+            <div className="flex flex-col gap-1 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+              <div className="flex justify-center gap-2">
+                {table.map((_, i) => (
+                  <div key={`lis-idx-${i}`} className="w-8 shrink-0 text-center text-[10px] text-muted-foreground font-mono">
+                    {i}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-2">
+                {table.map((val, i) => {
+                  const isI = i === iPos;
+                  const isJ = i === jPos;
+                  return (
+                    <div
+                      key={`lis-cell-${i}`}
+                      className="w-8 h-8 shrink-0 flex items-center justify-center text-[11px] font-mono font-semibold border transition-colors"
+                      style={{
+                        background: isI ? hiBg : isJ ? jBg : pendingBg,
+                        borderColor: isI ? hiBorder : isJ ? jBorder : "hsl(150, 10%, 26%)",
+                        color: isI || isJ ? "hsl(210, 40%, 8%)" : "hsl(150, 20%, 88%)",
+                      }}
+                    >
+                      {val}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 max-h-40 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-3 text-[11px] sm:text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-12).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to construct LIS.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
         </button>
       </div>
     );
