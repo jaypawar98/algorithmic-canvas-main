@@ -2221,7 +2221,7 @@ int kruskal(int edges[][3], int E, int V) {
     }
     return cost;
 }`) },
-    { name: "Stable Matching", vizType: "graph", description: "Gale-Shapley stable matching algorithm", complexity: { time: "O(n²)", space: "O(n)" },
+    { name: "Stable Matching", vizType: "dp-table", description: "Gale-Shapley stable matching algorithm", complexity: { time: "O(n²)", space: "O(n)" },
       code: c("Gale-Shapley",
         `public class StableMatching {
     public static int[] match(int[][] menPref, int[][] womenPref) {
@@ -2271,7 +2271,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
 }`) },
   ],
   "Simple Recursive": [
-    { name: "Cellular Automata", vizType: "grid", description: "Grid-based simulation with simple rules (Rule 110)", complexity: { time: "O(n×g)", space: "O(n)" },
+    { name: "Cellular Automata", vizType: "dp-table", description: "Grid-based simulation with simple rules", complexity: { time: "O(n×g)", space: "O(n)" },
       code: c("Cellular Automata (Rule 110)",
         `public class CellularAutomata {
     public static int[] step(int[] cells, int rule) {
@@ -2327,7 +2327,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
     }
     return false;
 }`) },
-    { name: "Euclidean Greatest Common Divisor", vizType: "recursion-tree", description: "Find GCD using Euclidean algorithm", complexity: { time: "O(log min(a,b))", space: "O(log min(a,b))" },
+    { name: "Euclidean Greatest Common Divisor", vizType: "dp-table", description: "Find GCD using Euclidean algorithm", complexity: { time: "O(log min(a,b))", space: "O(log min(a,b))" },
       code: c("Euclidean GCD",
         `public class GCD {
     public static int gcd(int a, int b) {
@@ -2359,7 +2359,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
     if (n <= 1) return 1;
     return n * factorial(n - 1);
 }`) },
-    { name: "Suffix Array", vizType: "text", description: "Array of sorted suffixes of a string", complexity: { time: "O(n log²n)", space: "O(n)" },
+    { name: "Suffix Array", vizType: "dp-table", description: "Array of sorted suffixes of a string", complexity: { time: "O(n log²n)", space: "O(n)" },
       code: c("Suffix Array",
         `public class SuffixArray {
     public static int[] build(String s) {
@@ -2384,7 +2384,7 @@ void stableMatch(int menPref[][MAX], int womenPref[][MAX], int n, int match[]) {
 }`) },
   ],
   "Uncategorized": [
-    { name: "Affine Cipher", vizType: "text", description: "Encryption using affine function E(x)=(ax+b) mod 26", complexity: { time: "O(n)", space: "O(n)" },
+    { name: "Affine Cipher", vizType: "dp-table", description: "Encryption using affine function E(x)=(ax+b) mod 26", complexity: { time: "O(n)", space: "O(n)" },
       code: c("Affine Cipher",
         `public class AffineCipher {
     public static String encrypt(String text, int a, int b) {

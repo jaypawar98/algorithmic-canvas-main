@@ -254,6 +254,49 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
     return { nodes, edges };
   }
 
+  if (algorithmName.includes("Prim")) {
+    const n = 10;
+    const nodes: Node[] = [];
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      nodes.push({ id: i, x: 200 + Math.cos(angle) * 120, y: 170 + Math.sin(angle) * 120 });
+    }
+    const edges: Edge[] = [
+      { from: 0, to: 1, weight: 5 }, { from: 0, to: 2, weight: 2 }, { from: 0, to: 7, weight: 6 }, { from: 0, to: 9, weight: 2 },
+      { from: 1, to: 2, weight: 7 }, { from: 1, to: 5, weight: 8 }, { from: 1, to: 9, weight: 5 },
+      { from: 2, to: 3, weight: 4 }, { from: 2, to: 5, weight: 4 }, { from: 2, to: 9, weight: 9 },
+      { from: 3, to: 4, weight: 5 }, { from: 3, to: 8, weight: 6 },
+      { from: 4, to: 5, weight: 3 }, { from: 4, to: 8, weight: 8 },
+      { from: 5, to: 6, weight: 4 }, { from: 5, to: 7, weight: 2 }, { from: 5, to: 9, weight: 7 },
+      { from: 6, to: 7, weight: 3 }, { from: 6, to: 8, weight: 5 },
+      { from: 7, to: 8, weight: 7 }, { from: 7, to: 9, weight: 8 },
+      { from: 8, to: 9, weight: 9 },
+    ];
+    return { nodes, edges };
+  }
+
+  if (algorithmName.includes("Cycle Detection")) {
+    const nodes: Node[] = [
+      { id: 0, x: 220, y: 50 },
+      { id: 1, x: 300, y: 80 },
+      { id: 2, x: 330, y: 160 },
+      { id: 3, x: 280, y: 220 },
+      { id: 4, x: 200, y: 220 },
+      { id: 5, x: 150, y: 150 },
+      { id: 6, x: 170, y: 80 }
+    ];
+    const edges: Edge[] = [
+      { from: 0, to: 1, weight: 1 },
+      { from: 1, to: 2, weight: 1 },
+      { from: 2, to: 3, weight: 1 },
+      { from: 3, to: 4, weight: 1 },
+      { from: 4, to: 5, weight: 1 },
+      { from: 5, to: 6, weight: 1 },
+      { from: 6, to: 2, weight: 1 }
+    ];
+    return { nodes, edges };
+  }
+
   const count = 8;
   const nodes: Node[] = [];
   for (let i = 0; i < count; i++) {
@@ -544,28 +587,48 @@ function primSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const adj: Array<Array<{ to: number; w: number }>> = Array.from({ length: n }, () => []);
   edges.forEach(e => { adj[e.from].push({ to: e.to, w: e.weight }); adj[e.to].push({ to: e.from, w: e.weight }); });
   const inMST = new Set<number>();
-  const key = Array(n).fill(Infinity);
-  const parent = Array(n).fill(-1);
   const steps: GStep[] = [];
   const mstEdges: string[] = [];
-  key[0] = 0;
+  let wsum = 0;
+  const logs: string[] = [];
 
-  for (let i = 0; i < n; i++) {
-    let u = -1;
-    for (let v = 0; v < n; v++) if (!inMST.has(v) && (u === -1 || key[v] < key[u])) u = v;
-    inMST.add(u);
-    if (parent[u] !== -1) {
-      mstEdges.push(edgeKey(u, parent[u]));
-    }
-    steps.push({ visited: [...inMST], current: u, activeEdges: [...mstEdges] });
-    for (const { to, w } of adj[u]) {
-      if (!inMST.has(to) && w < key[to]) {
-        key[to] = w;
-        parent[to] = u;
+  inMST.add(0);
+  steps.push({ visited: [...inMST], current: 0, activeEdges: [...mstEdges], logs: [...logs] });
+
+  for (let k = 0; k < n - 1; k++) {
+    let minW = Infinity;
+    let minU = -1;
+    let minV = -1;
+
+    for (let u = 0; u < n; u++) {
+      if (inMST.has(u)) {
+        for (const edge of adj[u]) {
+          if (!inMST.has(edge.to)) {
+            logs.push(`${u} -> ${edge.to}`);
+            steps.push({ visited: [...inMST], current: edge.to, activeEdges: [...mstEdges, edgeKey(u, edge.to)], logs: [...logs] });
+            logs.push(`${u} <- ${edge.to}`);
+            if (edge.w < minW) {
+              minW = edge.w;
+              minU = u;
+              minV = edge.to;
+            }
+          }
+        }
       }
     }
+
+    if (minV !== -1) {
+      wsum += minW;
+      inMST.add(minV);
+      mstEdges.push(edgeKey(minU, minV));
+      steps.push({ visited: [...inMST], current: minV, activeEdges: [...mstEdges], logs: [...logs] });
+    } else {
+      break;
+    }
   }
-  steps.push({ visited: [...inMST], current: -1, activeEdges: [...mstEdges] });
+
+  logs.push(`The sum of all edges is: ${wsum}`);
+  steps.push({ visited: [...inMST], current: -1, activeEdges: [...mstEdges], logs: [...logs] });
   return steps;
 }
 
@@ -1148,30 +1211,56 @@ function stableMatchingSteps(nodes: Node[], edges: Edge[]): GStep[] {
   return steps;
 }
 
-function cycleDetectionSteps(nodes: Node[], edges: Edge[]): GStep[] {
-  const adj: number[][] = Array.from({ length: nodes.length }, () => []);
-  edges.forEach(e => { adj[e.from].push(e.to); adj[e.to].push(e.from); });
+function cycleDetectionSteps(nodes: Node[], _edges: Edge[]): GStep[] {
+  const next: Record<number, number> = {
+    0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 2
+  };
+  
   const steps: GStep[] = [];
-  const visited = new Set<number>();
-  const ae: string[] = [];
-
-  // DFS-based cycle detection
-  function dfs(u: number, parent: number) {
-    visited.add(u);
-    steps.push({ visited: [...visited], current: u, activeEdges: [...ae] });
-    for (const v of adj[u]) {
-      if (!visited.has(v)) {
-        ae.push(edgeKey(u, v));
-        dfs(v, u);
-      } else if (v !== parent) {
-        // Cycle found
-        ae.push(edgeKey(u, v));
-        steps.push({ visited: [...visited], current: v, activeEdges: [...ae], nodeLabels: { [u]: "CYC", [v]: "CYC" } });
-        return;
-      }
-    }
+  const logs: string[] = [];
+  
+  let slow = 0;
+  let fast = 0;
+  
+  const pushStep = (s: number, f: number) => {
+    const labels: Record<number, string> = {};
+    if (s === f) labels[s] = "S, F";
+    else { labels[s] = "S"; labels[f] = "F"; }
+    steps.push({ visited: [], current: s, activeEdges: [], nodeLabels: labels, logs: [...logs] });
+  };
+  
+  pushStep(slow, fast);
+  
+  do {
+    slow = next[slow];
+    fast = next[next[fast]];
+    pushStep(slow, fast);
+  } while (slow !== fast);
+  
+  let cycleStartPosition = 0;
+  slow = 0;
+  while (slow !== fast) {
+    slow = next[slow];
+    fast = next[fast];
+    cycleStartPosition++;
+    pushStep(slow, fast);
   }
-  dfs(0, -1);
+  
+  logs.push(`cycle start position: ${cycleStartPosition}`);
+  pushStep(slow, fast);
+  
+  let cycleLength = 1;
+  fast = next[slow];
+  pushStep(slow, fast);
+  while (slow !== fast) {
+    fast = next[fast];
+    cycleLength++;
+    pushStep(slow, fast);
+  }
+  
+  logs.push(`cycle length: ${cycleLength}`);
+  steps.push({ visited: [], current: -1, activeEdges: [], nodeLabels: { [slow]: "S, F" }, logs: [...logs] });
+  
   return steps;
 }
 
@@ -1283,17 +1372,18 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const isPageRank = algorithmName.includes("PageRank");
   const isTarjan = algorithmName.includes("Tarjan") || algorithmName.includes("Strongly Connected");
   const isBellmanFord = algorithmName.includes("Bellman-Ford");
+  const isCycleDetection = algorithmName.includes("Cycle Detection");
 
   return (
-    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) ? "justify-start pt-2" : "justify-center"}`}>
+    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord || isCycleDetection) ? "justify-start pt-2" : "justify-center"}`}>
       {isPageRank && (
         <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">Web Page inter-connections</div>
       )}
-      {(isTarjan || isBellmanFord) && (
-        <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">GraphTracer</div>
+      {(isTarjan || isBellmanFord || isCycleDetection) && (
+        <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">{isCycleDetection ? "Linked List" : "GraphTracer"}</div>
       )}
-      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : isTarjan || isBellmanFord ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
-        {(isTopological || isPageRank || isTarjan || isBellmanFord) && (
+      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : isTarjan || isBellmanFord || isCycleDetection ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
+        {(isTopological || isPageRank || isTarjan || isBellmanFord || isCycleDetection) && (
           <defs>
             <marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(0, 0%, 72%)" />
@@ -1303,7 +1393,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.edges.map((e) => {
           const from = graph.nodes[e.from];
           const to = graph.nodes[e.to];
-          const ek = (isPageRank || isTarjan || isBellmanFord) ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
+          const ek = (isPageRank || isTarjan || isBellmanFord || isCycleDetection) ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
           const active = activeEdges.has(ek);
           const edgeStroke = isBipartite
             ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
@@ -1323,9 +1413,9 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
               <line
                 x1={from.x} y1={from.y} x2={to.x} y2={to.y}
                 stroke={edgeStroke}
-                strokeWidth={active ? 3 : 1.5}
-                opacity={(isBipartite || isBFS || isDFS || isPageRank || isTarjan || isBellmanFord) ? 1 : active ? 1 : 0.5}
-                markerEnd={isTopological || isPageRank || isTarjan || isBellmanFord ? "url(#graph-arrow)" : undefined}
+                strokeWidth={active ? 2.5 : 1}
+                markerEnd={(isPageRank || isTarjan || isBellmanFord || isCycleDetection) && !(isBipartite && active) ? "url(#graph-arrow)" : ""}
+                className="transition-colors duration-200"
               />
               {showWeights && (
                 <text
@@ -1651,9 +1741,9 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           </div>
         </div>
       )}
-      {(algorithmName.includes("Dijkstra") || algorithmName.includes("Kruskal") || isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) && (
+      {(algorithmName.includes("Dijkstra") || algorithmName.includes("Kruskal") || algorithmName.includes("Prim") || isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord || isCycleDetection) && (
         <div className="w-full mt-6 border-t border-border/20 pt-3 max-w-[24rem]">
-          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="text-[10px] text-muted-foreground mb-2">{isCycleDetection ? "Console" : "LogTracer"}</div>
           <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
             {logs.length > 0 ? logs.slice(-12).map((entry, index) => (
               <div key={`${index}-${entry}`}>{entry}</div>

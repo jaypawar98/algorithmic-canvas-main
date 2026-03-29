@@ -87,6 +87,34 @@ type DPStep = {
     activeIdx?: number;
     activeSlot?: number;
   };
+  stableMatching?: {
+    A: string[];
+    B: string[];
+    activeA?: string;
+    activeB?: string;
+    stableA: string[];
+    stableB: string[];
+  };
+  cellularAutomata?: {
+    grid: string[][];
+    generation: number;
+    currI: number;
+    currJ: number;
+  };
+  euclidean?: {
+    A: number[];
+    activeIdx?: number;
+  };
+  suffixArray?: {
+    SA: (string | number)[][];
+    givenWord: string[];
+  };
+  affine?: {
+    encrypt: string[];
+    decrypt: string[];
+    activeEncryptIdx?: number;
+    activeDecryptIdx?: number;
+  };
 };
 
 /** D[0]=D[1]=1, D[i]=D[i-1]+D[i-2]; indices 0..lastIndex match algorithm-visualizer "Sequence". */
@@ -859,6 +887,332 @@ function jobSchedulingSteps(): DPStep[] {
   return steps;
 }
 
+function stableMatchingSteps(): DPStep[] {
+  const men = ['Flavio', 'Stephen', 'Albert', 'Jack'];
+  const women = ['July', 'Valentine', 'Violet', 'Summer'];
+  
+  const mPref: Record<string, string[]> = {
+    Flavio: ['Valentine', 'July', 'Summer', 'Violet'],
+    Stephen: ['Summer', 'July', 'Valentine', 'Violet'],
+    Albert: ['July', 'Violet', 'Valentine', 'Summer'],
+    Jack: ['July', 'Violet', 'Valentine', 'Summer']
+  };
+  
+  const wPref: Record<string, string[]> = {
+    July: ['Jack', 'Stephen', 'Albert', 'Flavio'],
+    Valentine: ['Flavio', 'Jack', 'Stephen', 'Albert'],
+    Violet: ['Jack', 'Stephen', 'Flavio', 'Albert'],
+    Summer: ['Stephen', 'Flavio', 'Albert', 'Jack']
+  };
+
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+  
+  let freeMen = [...men];
+  const wPartner: Record<string, string | null> = {};
+  women.forEach(w => wPartner[w] = null);
+  
+  const mStable = new Set<string>();
+  const wStable = new Set<string>();
+  
+  const pushStep = (activeM?: string, activeW?: string) => {
+    steps.push({
+      table: [],
+      current: [-1],
+      is2D: false,
+      dpLogs: [...logs],
+      stableMatching: {
+        A: [...men],
+        B: [...women],
+        activeA: activeM,
+        activeB: activeW,
+        stableA: [...mStable],
+        stableB: [...wStable]
+      }
+    });
+  };
+
+  pushStep();
+
+  const mCount: Record<string, number> = {};
+  men.forEach(m => mCount[m] = 0);
+
+  while (freeMen.length > 0) {
+    const m = freeMen[0];
+    logs.push(`Selecting ${m}`);
+    pushStep(m);
+    
+    if (mCount[m] >= 4) {
+      freeMen.shift();
+      continue;
+    }
+    
+    const w = mPref[m][mCount[m]];
+    mCount[m]++;
+    logs.push(`--> Choicing ${w}`);
+    pushStep(m, w);
+    
+    const currPartner = wPartner[w];
+    if (currPartner === null) {
+      wPartner[w] = m;
+      freeMen.shift();
+      mStable.add(m);
+      wStable.add(w);
+      logs.push(`--> ${w} is not stable, stabilizing with ${m}`);
+      pushStep(m, w);
+    } else {
+      const wPrefList = wPref[w];
+      const mIdx = wPrefList.indexOf(m);
+      const currIdx = wPrefList.indexOf(currPartner);
+      
+      if (mIdx < currIdx) {
+        wPartner[w] = m;
+        freeMen.shift();
+        mStable.add(m);
+        freeMen.push(currPartner);
+        mStable.delete(currPartner);
+        logs.push(`--> ${w} is more stable with ${m} rather than ${currPartner} - stabilizing again`);
+        pushStep(m, w);
+      } else {
+        logs.push(`--> ${w} rejected ${m}`);
+        pushStep(m, w);
+      }
+    }
+  }
+
+  logs.push("Stable matching complete.");
+  pushStep();
+  return steps;
+}
+
+function cellularAutomataSteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const N = 10;
+  const fillShape = '#';
+  const emptyShape = '.';
+  const generations = 3;
+  
+  const grid: string[][] = Array(N).fill(0).map(() => Array(N).fill(emptyShape));
+  
+  // Predictable pseudo-random initialization
+  const seeds = [1, 5, 8, 12, 17, 23, 29, 36, 42, 55, 61, 74, 88, 93];
+  let seedIdx = 0;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      if (i === 0 || j === 0 || i === N - 1 || j === N - 1) {
+        grid[i][j] = fillShape;
+      } else {
+        const r = (seeds[seedIdx % seeds.length] * 17 + i * 31 + j * 47) % 100;
+        seedIdx++;
+        if (r < 40) grid[i][j] = fillShape;
+      }
+    }
+  }
+
+  const pushStep = (g: string[][], gen: number, currI: number, currJ: number) => {
+    steps.push({
+      table: [], current: [-1], is2D: false, dpLogs: [],
+      cellularAutomata: { grid: g.map(row => [...row]), generation: gen, currI, currJ }
+    });
+  };
+
+  pushStep(grid, 0, -1, -1);
+
+  let currentGrid = grid.map(row => [...row]);
+  
+  for (let iter = 0; iter < generations; iter++) {
+    let nextGrid = currentGrid.map(row => [...row]);
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        let adjCount = 0;
+        let twoAwayCount = 0;
+        for (let x = -2; x <= 2; x++) {
+          for (let y = -2; y <= 2; y++) {
+            if (!(x === 0 && y === 0)) {
+              const ni = i + x;
+              const nj = j + y;
+              let isFill = false;
+              if (ni >= 0 && ni < N && nj >= 0 && nj < N) {
+                isFill = (currentGrid[ni][nj] === fillShape);
+              } else {
+                isFill = true; // out of bounds counts as fill
+              }
+              if (isFill) {
+                if (x === -2 || x === 2 || y === -2 || y === 2) twoAwayCount++;
+                else adjCount++;
+              }
+            }
+          }
+        }
+        
+        if (adjCount >= 5) {
+          nextGrid[i][j] = fillShape;
+        } else if (adjCount <= 1) {
+          if (twoAwayCount < 3) nextGrid[i][j] = fillShape;
+          else nextGrid[i][j] = emptyShape;
+        } else {
+          nextGrid[i][j] = emptyShape;
+        }
+        
+        // Push intermediate steps moderately to not overload
+        if (i % 3 === 0 && j === 0) pushStep(nextGrid, iter + 1, i, j);
+      }
+    }
+    currentGrid = nextGrid;
+    pushStep(currentGrid, iter + 1, -1, -1);
+  }
+
+  return steps;
+}
+
+function euclideanGCDSteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const logs: string[] = [];
+  const a = [465, 255];
+  
+  const pushStep = (actIdx?: number) => {
+    steps.push({
+      table: [],
+      current: [-1],
+      is2D: false,
+      dpLogs: [...logs],
+      euclidean: {
+        A: [...a],
+        activeIdx: actIdx
+      }
+    });
+  };
+
+  pushStep();
+
+  if (a[0] > a[1]) {
+    const tmp = a[0];
+    a[0] = a[1];
+    a[1] = tmp;
+    pushStep();
+  }
+
+  while (a[0] > 0) {
+    logs.push(`${a[1]} % ${a[0]} = ${a[1] % a[0]}`);
+    pushStep(1);
+    
+    a[1] %= a[0];
+    logs.push("Switching a[1] with a[1]%a[0]");
+    pushStep(1);
+    
+    const tmp = a[0];
+    a[0] = a[1];
+    a[1] = tmp;
+    logs.push("Now switching the two values to keep a[0] < a[1]");
+    pushStep(); 
+  }
+
+  logs.push(`The greatest common divisor is ${a[1]}`);
+  pushStep();
+  return steps;
+}
+
+function suffixArraySteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const logs: string[] = [];
+  const word = "virgo";
+  const s = word + "$";
+  const givenWordArr = word.split(""); // without $
+  
+  const arr: (string | number)[][] = [];
+  for (let i = 1; i <= s.length; i++) {
+     arr.push([i, '-']);
+  }
+  
+  const pushStep = () => {
+    steps.push({
+      table: [], current: [-1], is2D: false, dpLogs: [...logs],
+      suffixArray: { SA: arr.map(e => [...e]), givenWord: givenWordArr }
+    });
+  };
+
+  logs.push("Appended '$' at the end of word as terminating (special) character. Beginning filling of suffixes");
+  pushStep();
+  
+  for(let i = 0; i < s.length; i++){
+     arr[i][1] = s.slice(i);
+     pushStep();
+  }
+  
+  logs.push("Re-organizing Suffix Array in sorted order of suffixes using efficient sorting algorithm (O(N.log(N)))");
+  pushStep();
+  
+  const toSort = arr.map(e => [...e]);
+  
+  toSort.sort((a, b) => {
+    const valA = a[1] as string;
+    const valB = b[1] as string;
+    const isGreater = valA > valB;
+    logs.push(`The condition a [1] (${valA}) > b [1] (${valB}) is ${isGreater ? "true" : "false"}`);
+    return valA.localeCompare(valB);
+  });
+  
+  for(let i=0; i < toSort.length; i++){
+    arr[i] = toSort[i];
+    pushStep();
+  }
+  return steps;
+}
+
+function affineCipherSteps(): DPStep[] {
+  const steps: DPStep[] = [];
+  const logs: string[] = [];
+  const plainText = 'secret';
+  const N = 26;
+  const keys = { a: 5, b: 7 };
+  const a_inv = 21;
+  const encrypt: string[] = [];
+  const decrypt: string[] = [];
+
+  const pushStep = (actEnc?: number, actDec?: number) => {
+    steps.push({
+      table: [], current: [-1], is2D: false, dpLogs: [...logs],
+      affine: { encrypt: [...encrypt], decrypt: [...decrypt], activeEncryptIdx: actEnc, activeDecryptIdx: actDec }
+    });
+  };
+
+  pushStep();
+  
+  logs.push("Beginning Affine Encryption");
+  logs.push("Encryption formula: (keys.a * index + keys.b) % N");
+  logs.push(`keys.a=${keys.a}, keys.b=${keys.b}, N=${N}`);
+  pushStep();
+
+  for (let i = 0; i < plainText.length; i++) {
+    const alpha = plainText[i];
+    const index = alpha.charCodeAt(0) - 'a'.charCodeAt(0);
+    const result = ((keys.a * index) + keys.b) % N;
+    logs.push(`Index of ${alpha} = ${index}`);
+    encrypt.push(String.fromCharCode(result + 'a'.charCodeAt(0)));
+    pushStep(i, undefined);
+  }
+
+  logs.push(" ");
+  logs.push("Beginning Affine Decryption");
+  logs.push("Decryption formula: (a^-1 * (index - keys.b)) % N");
+  logs.push(`keys.b=${keys.b}, N=${N}`);
+  pushStep(undefined, undefined);
+
+  for (let i = 0; i < encrypt.length; i++) {
+    const alpha = encrypt[i];
+    const index = alpha.charCodeAt(0) - 'a'.charCodeAt(0);
+    const base = index - keys.b;
+    let result = (a_inv * base) % N;
+    if (result < 0) result += N;
+    logs.push(`Index of ${alpha} = ${index}`);
+    decrypt.push(String.fromCharCode(result + 'a'.charCodeAt(0)));
+    pushStep(undefined, i);
+  }
+
+  pushStep();
+  return steps;
+}
+
 function slidingWindowSteps(): DPStep[] {
   const D = [4, 2, 4, -4, -1, -4, 2, 2, -4, 0, -4, 4, -3, -3, -4, 1, -3, 0, -1, 0];
   const logs: string[] = [];
@@ -1153,6 +1507,11 @@ function getSteps(name: string): DPStep[] {
   if (name.includes("Z String")) return zSearchSteps();
   if (name.includes("Boyer")) return boyerMooreMajoritySteps();
   if (name.includes("Job Scheduling")) return jobSchedulingSteps();
+  if (name.includes("Stable Matching")) return stableMatchingSteps();
+  if (name.includes("Cellular Automata")) return cellularAutomataSteps();
+  if (name.includes("Euclidean")) return euclideanGCDSteps();
+  if (name.includes("Suffix Array")) return suffixArraySteps();
+  if (name.includes("Affine")) return affineCipherSteps();
   return fibSteps(14);
 }
 
@@ -2812,6 +3171,414 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
               ))
             ) : (
               <div>Press play to schedule jobs.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isStableMatching = algorithmName.includes("Stable Matching") && currentStep.stableMatching;
+  if (isStableMatching) {
+    const { A, B, activeA, activeB, stableA, stableB } = currentStep.stableMatching!;
+    const activeBg = "hsl(145, 60%, 45%)"; // green highlight
+    const stableBg = "hsl(224, 76%, 48%)"; // blue for matched
+    const pendingBg = "hsl(215, 10%, 18%)";
+    const borderDark = "hsl(215, 10%, 26%)";
+
+    const renderStableArray = (arr: string[], label: string, activeId?: string, stableArr?: string[]) => (
+      <div className="w-full shrink-0 border-t border-border/20 pt-3 flex-1 flex flex-col justify-center">
+        <div className="text-[10px] text-muted-foreground mb-4">{label}</div>
+        <div className="flex items-center justify-center overflow-x-auto">
+          <div className="flex flex-col min-w-min mx-auto">
+            <div className="flex justify-start mb-1">
+              {arr.map((_, i) => (
+                <div key={`stm-idx-${label}-${i}`} className="flex-1 min-w-[3.5rem] px-2 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-start">
+              {arr.map((val, i) => {
+                const isActive = val === activeId;
+                const isStable = stableArr?.includes(val);
+                const bgOverride = isActive ? activeBg : (isStable ? stableBg : pendingBg);
+                return (
+                  <div
+                    key={`stm-cell-${label}-${i}`}
+                    className="flex-1 min-w-[3.5rem] h-8 px-2 shrink-0 flex items-center justify-center text-[11px] font-mono transition-colors"
+                    style={{
+                      background: bgOverride,
+                      color: isActive || isStable ? "white" : "hsl(150, 20%, 88%)",
+                      borderTop: `1px solid ${borderDark}`,
+                      borderBottom: `1px solid ${borderDark}`,
+                      borderLeft: `1px solid ${borderDark}`,
+                      borderRight: i === arr.length - 1 ? `1px solid ${borderDark}` : 'none'
+                    }}
+                  >
+                    {val}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {renderStableArray(A, "A", activeA, stableA)}
+          {renderStableArray(B, "B", activeB, stableB)}
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">Console</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line}</div>
+              ))
+            ) : (
+              <div>Press play to evaluate stable matching.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isCellular = algorithmName.includes("Cellular Automata") && currentStep.cellularAutomata;
+  if (isCellular) {
+    const { grid, generation, currI, currJ } = currentStep.cellularAutomata!;
+    const pinkBg = "hsl(330, 80%, 45%)";
+    const darkBg = "hsl(215, 12%, 18%)";
+    const activeBg = "hsl(224, 76%, 48%)"; // blue for currently processing cell
+    const borderDark = "hsl(215, 10%, 25%)";
+    
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="w-full shrink-0 border-t border-border/20 pt-3 flex-1 flex flex-col justify-center">
+            <div className="text-[10px] text-muted-foreground mb-4">Array2DTracer</div>
+            <div className="flex items-center justify-center overflow-x-auto">
+              <div className="flex flex-col min-w-min mx-auto">
+                <div className="flex justify-start mb-1 h-6">
+                  <div className="w-6 shrink-0"></div>
+                  {grid[0].map((_, idx) => (
+                    <div key={`cal-h-${idx}`} className="w-7 shrink-0 text-center text-[10px] text-muted-foreground font-mono">
+                      {idx}
+                    </div>
+                  ))}
+                </div>
+                {grid.map((row, i) => (
+                  <div key={`cal-row-${i}`} className="flex justify-start items-center">
+                    <div className="w-6 shrink-0 text-center text-[10px] text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                    <div className="flex">
+                      {row.map((val, j) => {
+                        const isActive = currI === i && currJ === j;
+                        const isFill = val === '#';
+                        return (
+                          <div
+                            key={`cal-col-${j}`}
+                            className="w-7 h-7 shrink-0 flex items-center justify-center text-[11px] font-mono transition-colors"
+                            style={{
+                              background: isActive ? activeBg : (isFill ? pinkBg : darkBg),
+                              color: isFill ? "white" : "hsl(150, 10%, 45%)",
+                              borderTop: `1px solid ${borderDark}`,
+                              borderBottom: i === grid.length - 1 ? `1px solid ${borderDark}` : 'none',
+                              borderLeft: `1px solid ${borderDark}`,
+                              borderRight: j === row.length - 1 ? `1px solid ${borderDark}` : 'none',
+                            }}
+                          >
+                            {val}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-center mt-6 text-[11px] font-mono text-muted-foreground">
+              Generation: {generation}
+            </div>
+          </div>
+        </div>
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isEuclidean = algorithmName.includes("Euclidean Greatest Common Divisor") && currentStep.euclidean;
+  if (isEuclidean) {
+    const { A, activeIdx } = currentStep.euclidean!;
+    const activeBg = "hsl(224, 76%, 48%)";
+    const pendingBg = "hsl(215, 12%, 18%)";
+    const borderDark = "hsl(215, 10%, 25%)";
+    
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center">
+          <div className="w-full shrink-0 border-t border-border/20 pt-10 flex-1 flex flex-col">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4 sm:pl-8">Euclidean Algorithm</div>
+            <div className="flex items-center justify-center mt-12 overflow-x-auto">
+              <div className="flex flex-col mx-auto">
+                <div className="flex justify-start mb-1 h-6">
+                  {A.map((_, i) => (
+                    <div key={`eu-idx-${i}`} className="w-16 shrink-0 text-center text-xs text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {A.map((val, i) => {
+                    const isActive = i === activeIdx;
+                    return (
+                      <div
+                        key={`eu-val-${i}`}
+                        className="w-16 h-12 flex shrink-0 items-center justify-center text-base font-mono transition-colors"
+                        style={{
+                          background: isActive ? activeBg : pendingBg,
+                          color: isActive ? "white" : "hsl(150, 10%, 80%)",
+                          borderTop: `1px solid ${borderDark}`,
+                          borderBottom: `1px solid ${borderDark}`,
+                          borderLeft: `1px solid ${borderDark}`,
+                          borderRight: i === A.length - 1 ? `1px solid ${borderDark}` : 'none'
+                        }}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line}</div>
+              ))
+            ) : (
+              <div>Press play to evaluate step by step.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isSuffixArray = algorithmName.includes("Suffix Array") && currentStep.suffixArray;
+  if (isSuffixArray) {
+    const { SA, givenWord } = currentStep.suffixArray!;
+    const borderDark = "hsl(215, 10%, 26%)";
+    const bgDark = "hsl(215, 12%, 18%)";
+    
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-6 gap-6">
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Suffix Array</div>
+            <div className="flex items-center justify-center overflow-x-auto">
+              <div className="flex flex-col mx-auto">
+                <div className="flex justify-start mb-1">
+                  <div className="w-8 shrink-0 text-center text-[10px] text-muted-foreground"></div>
+                  <div className="w-8 shrink-0 text-center text-[10px] text-muted-foreground">0</div>
+                  <div className="w-16 shrink-0 text-center text-[10px] text-muted-foreground">1</div>
+                </div>
+                {SA.map((row, i) => (
+                  <div key={`sa-row-${i}`} className="flex justify-start">
+                    <div className="w-8 shrink-0 flex items-center justify-center text-[10px] text-muted-foreground">
+                      {i}
+                    </div>
+                    {row.map((val, j) => (
+                      <div
+                        key={`sa-col-${i}-${j}`}
+                        className={`${j === 0 ? "w-8" : "w-16"} h-7 flex shrink-0 items-center justify-center text-xs font-mono`}
+                        style={{
+                          background: bgDark,
+                          color: "hsl(150, 20%, 88%)",
+                          borderTop: `1px solid ${borderDark}`,
+                          borderBottom: i === SA.length - 1 ? `1px solid ${borderDark}` : 'none',
+                          borderLeft: `1px solid ${borderDark}`,
+                          borderRight: j === row.length - 1 ? `1px solid ${borderDark}` : 'none'
+                        }}
+                      >
+                        {val}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Given Word</div>
+            <div className="flex items-center justify-center overflow-x-auto">
+              <div className="flex flex-col mx-auto">
+                <div className="flex justify-start mb-1">
+                  {givenWord.map((_, i) => (
+                    <div key={`gw-idx-${i}`} className="w-8 shrink-0 text-center text-[10px] text-muted-foreground">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {givenWord.map((char, i) => (
+                    <div
+                      key={`gw-char-${i}`}
+                      className="w-8 h-8 flex shrink-0 items-center justify-center text-xs font-mono"
+                      style={{
+                        background: bgDark,
+                        color: "hsl(150, 20%, 88%)",
+                        borderTop: `1px solid ${borderDark}`,
+                        borderBottom: `1px solid ${borderDark}`,
+                        borderLeft: `1px solid ${borderDark}`,
+                        borderRight: i === givenWord.length - 1 ? `1px solid ${borderDark}` : 'none'
+                      }}
+                    >
+                      {char}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">Progress</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line}</div>
+              ))
+            ) : (
+              <div>Press play to construct array.</div>
+            )}
+          </div>
+        </div>
+
+        <button onClick={reset} className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  const isAffine = algorithmName.includes("Affine Cipher") && currentStep.affine;
+  if (isAffine) {
+    const { encrypt, decrypt, activeEncryptIdx, activeDecryptIdx } = currentStep.affine!;
+    const borderDark = "hsl(215, 10%, 25%)";
+    const bgDark = "hsl(215, 12%, 18%)";
+    const activeBg = "hsl(224, 76%, 48%)";
+    
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-6 gap-6">
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Encryption</div>
+            <div className="flex items-center justify-center mt-6 overflow-x-auto">
+              <div className="flex flex-col mx-auto">
+                <div className="flex justify-start mb-1 h-6">
+                  {encrypt.length === 0 ? (
+                    <div className="h-6 w-full" />
+                  ) : encrypt.map((_, i) => (
+                    <div key={`enc-idx-${i}`} className="w-12 shrink-0 text-center text-xs text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {encrypt.map((char, i) => (
+                    <div
+                      key={`enc-char-${i}`}
+                      className="w-12 h-10 flex shrink-0 items-center justify-center text-sm font-mono transition-colors"
+                      style={{
+                        background: i === activeEncryptIdx ? activeBg : bgDark,
+                        color: i === activeEncryptIdx ? "white" : "hsl(150, 10%, 80%)",
+                        borderTop: `1px solid ${borderDark}`,
+                        borderBottom: `1px solid ${borderDark}`,
+                        borderLeft: `1px solid ${borderDark}`,
+                        borderRight: i === encrypt.length - 1 ? `1px solid ${borderDark}` : 'none'
+                      }}
+                    >
+                      {char}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full shrink-0 border-t border-border/20 pt-3">
+            <div className="text-[10px] text-muted-foreground mb-4 pl-4">Decryption</div>
+            <div className="flex items-center justify-center mt-6 overflow-x-auto">
+              <div className="flex flex-col mx-auto">
+                <div className="flex justify-start mb-1 h-6">
+                  {decrypt.length === 0 ? (
+                    <div className="h-6 w-full" />
+                  ) : decrypt.map((_, i) => (
+                    <div key={`dec-idx-${i}`} className="w-12 shrink-0 text-center text-xs text-muted-foreground font-mono">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start">
+                  {decrypt.map((char, i) => (
+                    <div
+                      key={`dec-char-${i}`}
+                      className="w-12 h-10 flex shrink-0 items-center justify-center text-sm font-mono transition-colors"
+                      style={{
+                        background: i === activeDecryptIdx ? activeBg : bgDark,
+                        color: i === activeDecryptIdx ? "white" : "hsl(150, 10%, 80%)",
+                        borderTop: `1px solid ${borderDark}`,
+                        borderBottom: `1px solid ${borderDark}`,
+                        borderLeft: `1px solid ${borderDark}`,
+                        borderRight: i === decrypt.length - 1 ? `1px solid ${borderDark}` : 'none'
+                      }}
+                    >
+                      {char}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-32 max-h-48 overflow-y-auto rounded-md border border-border/20 bg-black/10 p-4 text-[11px] sm:text-xs font-mono text-foreground/90 leading-relaxed">
+            {logLines.length > 0 ? (
+              logLines.slice(-14).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`} className="whitespace-pre">{line.trim() === "" ? "\n" : line}</div>
+              ))
+            ) : (
+              <div>Press play to begin affine mapping.</div>
             )}
           </div>
         </div>
