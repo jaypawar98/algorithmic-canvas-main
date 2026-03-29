@@ -31,6 +31,18 @@ type Step = {
   mergeHighlight0?: number | null;
   mergeHighlight1?: number | null;
   mergeLogs?: string[];
+  /** Pigeonhole Sort: holes as value lists; cumulative console (algorithm-visualizer style) */
+  pigeonHoles?: number[][];
+  pigeonConsoleLogs?: string[];
+  /** Quicksort: cumulative LogTracer lines */
+  quickLogs?: string[];
+  /** Radix Sort: Array2DTracer row0 = main, row1 = output buffer, row2 = count[0..9] */
+  radixRow0?: number[];
+  radixRow1?: number[];
+  radixRow2?: number[];
+  /** Active digit bucket column 0–9 (count row highlight) */
+  radixDigitCol?: number | null;
+  radixLogs?: string[];
 };
 
 const bubbleDemoArray = [8, 3, 1, 1, 4, 8, 2, 3, 8, 3, 4, 3, 4, 8, 3];
@@ -54,6 +66,12 @@ const countingDemoArray = [
 const mergeDemoArray = [
   49, 15, 22, 7, 31, 11, 8, 46, 3, 19, 0, 28, 33, 41, 12, 24, 38, 9, 44, 17,
 ];
+/** n=7, tight range — matches algorithm-visualizer Pigeonhole Sort. */
+const pigeonDemoArray = [1, 4, 6, 7, 7, 9, 9];
+/** n=15 — algorithm-visualizer Quicksort reference. */
+const quickDemoArray = [7, 1, 7, 7, 3, 7, 8, 8, 4, 3, 6, 5, 7, 2, 5];
+/** n=10 — algorithm-visualizer Radix Sort (LSD) reference. */
+const radixDemoArray = [271, 570, 455, 252, 547, 165, 292, 866, 654, 289];
 const pancakeDemoArray = [3, 3, 4, 8, 6, 1, 5, 5, 8, 6];
 
 function generateArray(len = 20) {
@@ -308,33 +326,55 @@ function mergeSortSteps(input: number[]): Step[] {
 function quickSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
+  const n = a.length;
+  if (n === 0) return steps;
+  const logs: string[] = [];
+
+  const snap = (partial: Step) => {
+    steps.push({ ...partial, quickLogs: [...logs] });
+  };
+
+  logs.push(`original array = [${input.join(",")}]`);
+  snap({ arr: [...a], comparing: [], sorted: [] });
 
   function partition(l: number, h: number): number {
     const pivot = a[h];
+    logs.push(`partition range [${l}, ${h}], pivot at index ${h} (value ${pivot})`);
+    snap({ arr: [...a], comparing: [h], sorted: [], pivot: h, range: [l, h] });
     let i = l - 1;
     for (let j = l; j < h; j++) {
-      steps.push({ arr: [...a], comparing: [j, h], sorted: [], pivot: h, range: [l, h] });
+      logs.push(`compare a[${j}]=${a[j]} with pivot ${pivot}`);
+      snap({ arr: [...a], comparing: [j, h], sorted: [], pivot: h, range: [l, h] });
       if (a[j] < pivot) {
         i++;
         [a[i], a[j]] = [a[j], a[i]];
-        steps.push({ arr: [...a], comparing: [i, j], sorted: [] });
+        logs.push(`swap indices ${i} and ${j}`);
+        snap({ arr: [...a], comparing: [i, j], sorted: [], pivot: h, range: [l, h] });
       }
     }
     [a[i + 1], a[h]] = [a[h], a[i + 1]];
-    steps.push({ arr: [...a], comparing: [i + 1], sorted: [] });
+    logs.push(`move pivot to index ${i + 1}`);
+    snap({ arr: [...a], comparing: [i + 1], sorted: [], pivot: i + 1, range: [l, h] });
     return i + 1;
   }
 
   function sort(l: number, h: number) {
     if (l < h) {
+      logs.push(`quicksort(${l}, ${h})`);
+      snap({ arr: [...a], comparing: [], sorted: [], range: [l, h] });
       const pi = partition(l, h);
       sort(l, pi - 1);
       sort(pi + 1, h);
     }
   }
 
-  sort(0, a.length - 1);
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: a.length }, (_, i) => i) });
+  sort(0, n - 1);
+  logs.push(`sorted array = [${a.join(",")}]`);
+  snap({
+    arr: [...a],
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+  });
   return steps;
 }
 
@@ -803,26 +843,128 @@ function radixSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
   const a = [...input];
   const n = a.length;
+  if (n === 0) return steps;
+  const logs: string[] = [];
   const max = Math.max(...a);
-  for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) {
-    const output = Array(n).fill(0);
-    const count = Array(10).fill(0);
+  const expList: number[] = [];
+  for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) expList.push(exp);
+
+  const push = (o: {
+    comparing: number[];
+    sorted: number[];
+    row0: number[];
+    row1: number[];
+    row2: number[];
+    digitCol?: number | null;
+  }) => {
+    steps.push({
+      arr: [...a],
+      comparing: o.comparing,
+      sorted: o.sorted,
+      radixRow0: o.row0,
+      radixRow1: o.row1,
+      radixRow2: o.row2,
+      radixDigitCol: o.digitCol ?? null,
+      radixLogs: [...logs],
+    });
+  };
+
+  logs.push(`Original array = [${input.join(", ")}]`);
+  push({
+    comparing: [],
+    sorted: [],
+    row0: [...a],
+    row1: [...a],
+    row2: Array(10).fill(0),
+    digitCol: null,
+  });
+
+  let digitIdx = 0;
+  for (const exp of expList) {
+    logs.push(`Digit: ${digitIdx}`);
+    const out = Array(n).fill(0);
+    let count = Array(10).fill(0);
+    push({
+      comparing: [],
+      sorted: [],
+      row0: [...a],
+      row1: [...out],
+      row2: [...count],
+      digitCol: null,
+    });
+
     for (let i = 0; i < n; i++) {
-      count[Math.floor(a[i] / exp) % 10]++;
-      steps.push({ arr: [...a], comparing: [i], sorted: [] });
+      const d = Math.floor(a[i] / exp) % 10;
+      count[d]++;
+      push({
+        comparing: [i],
+        sorted: [],
+        row0: [...a],
+        row1: [...out],
+        row2: [...count],
+        digitCol: d,
+      });
     }
-    for (let i = 1; i < 10; i++) count[i] += count[i - 1];
+
+    for (let i = 1; i < 10; i++) {
+      count[i] += count[i - 1];
+      push({
+        comparing: [],
+        sorted: [],
+        row0: [...a],
+        row1: [...out],
+        row2: [...count],
+        digitCol: i,
+      });
+    }
+
     for (let i = n - 1; i >= 0; i--) {
-      const digit = Math.floor(a[i] / exp) % 10;
-      output[count[digit] - 1] = a[i];
-      count[digit]--;
+      const d = Math.floor(a[i] / exp) % 10;
+      out[count[d] - 1] = a[i];
+      count[d]--;
+      push({
+        comparing: [i],
+        sorted: [],
+        row0: [...a],
+        row1: [...out],
+        row2: [...count],
+        digitCol: d,
+      });
     }
+
     for (let i = 0; i < n; i++) {
-      a[i] = output[i];
-      steps.push({ arr: [...a], comparing: [i], sorted: [] });
+      a[i] = out[i];
+      push({
+        comparing: [i],
+        sorted: [],
+        row0: [...a],
+        row1: [...out],
+        row2: Array(10).fill(0),
+        digitCol: null,
+      });
     }
+
+    push({
+      comparing: [],
+      sorted: [],
+      row0: [...a],
+      row1: [...a],
+      row2: Array(10).fill(0),
+      digitCol: null,
+    });
+    digitIdx++;
   }
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: n }, (_, i) => i) });
+
+  logs.push(`sorted array = [${a.join(", ")}]`);
+  push({
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+    row0: [...a],
+    row1: [...a],
+    row2: Array(10).fill(0),
+    digitCol: null,
+  });
+
   return steps;
 }
 
@@ -900,26 +1042,56 @@ function bucketSortSteps(input: number[]): Step[] {
 
 function pigeonholeSortSteps(input: number[]): Step[] {
   const steps: Step[] = [];
+  const original = [...input];
   const a = [...input];
   const n = a.length;
+  if (n === 0) return steps;
   const min = Math.min(...a);
   const max = Math.max(...a);
   const range = max - min + 1;
-  const holes = Array(range).fill(0);
+  const holes: number[][] = Array.from({ length: range }, () => []);
+  const logs: string[] = [];
+
+  const push = (partial: Pick<Step, "arr" | "comparing" | "sorted">) => {
+    steps.push({
+      ...partial,
+      pigeonHoles: holes.map((h) => [...h]),
+      pigeonConsoleLogs: [...logs],
+    });
+  };
+
+  logs.push("Filling up holes");
+  push({ arr: [...original], comparing: [], sorted: [] });
+
   for (let i = 0; i < n; i++) {
-    holes[a[i] - min]++;
-    steps.push({ arr: [...a], comparing: [i], sorted: [] });
+    const holeIdx = a[i] - min;
+    holes[holeIdx].push(a[i]);
+    logs.push(`place ${a[i]} in hole ${holeIdx}`);
+    push({ arr: [...original], comparing: [i], sorted: [] });
   }
+
+  logs.push("Building sorted array");
   let idx = 0;
-  for (let i = 0; i < range; i++) {
-    while (holes[i] > 0) {
-      a[idx] = i + min;
-      steps.push({ arr: [...a], comparing: [idx], sorted: Array.from({ length: idx }, (_, k) => k) });
+  for (let h = 0; h < range; h++) {
+    while (holes[h].length > 0) {
+      const v = holes[h].shift()!;
+      a[idx] = v;
+      logs.push(`take ${v} from hole ${h} → index ${idx}`);
+      push({
+        arr: [...a],
+        comparing: [idx],
+        sorted: Array.from({ length: idx }, (_, k) => k),
+      });
       idx++;
-      holes[i]--;
     }
   }
-  steps.push({ arr: [...a], comparing: [], sorted: Array.from({ length: n }, (_, i) => i) });
+
+  logs.push(`Sorted array is ${a.join(",")}`);
+  push({
+    arr: [...a],
+    comparing: [],
+    sorted: Array.from({ length: n }, (_, i) => i),
+  });
   return steps;
 }
 
@@ -1150,6 +1322,14 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   const [mergeH0, setMergeH0] = useState<number | null>(null);
   const [mergeH1, setMergeH1] = useState<number | null>(null);
   const [mergeLogLines, setMergeLogLines] = useState<string[]>([]);
+  const [pigeonHoles, setPigeonHoles] = useState<number[][]>([]);
+  const [pigeonConsoleLogs, setPigeonConsoleLogs] = useState<string[]>([]);
+  const [quickLogLines, setQuickLogLines] = useState<string[]>([]);
+  const [radixRow0, setRadixRow0] = useState<number[]>([]);
+  const [radixRow1, setRadixRow1] = useState<number[]>([]);
+  const [radixRow2, setRadixRow2] = useState<number[]>([]);
+  const [radixDigitCol, setRadixDigitCol] = useState<number | null>(null);
+  const [radixLogLines, setRadixLogLines] = useState<string[]>([]);
   const stepRef = useRef(0);
   const stepsRef = useRef<Step[]>([]);
   const intervalRef = useRef<number | null>(null);
@@ -1164,6 +1344,9 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   const isBucketSort = algorithmName === "Bucket Sort";
   const isCountingSort = algorithmName === "Counting Sort";
   const isMergeSort = algorithmName === "Merge Sort";
+  const isRadixSort = algorithmName === "Radix Sort";
+  const isPigeonholeSort = algorithmName === "Pigeonhole Sort";
+  const isQuicksort = algorithmName === "Quicksort";
   const isPancakeSort = algorithmName === "Pancake Sort";
 
   const reset = useCallback(() => {
@@ -1185,11 +1368,17 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
                     ? [...countingDemoArray]
                     : isMergeSort
                       ? [...mergeDemoArray]
-                      : isBucketSort
-                        ? [...bucketDemoArray]
-                        : isPancakeSort
-                          ? [...pancakeDemoArray]
-                          : generateArray();
+                      : isRadixSort
+                        ? [...radixDemoArray]
+                        : isPigeonholeSort
+                        ? [...pigeonDemoArray]
+                        : isQuicksort
+                          ? [...quickDemoArray]
+                          : isBucketSort
+                          ? [...bucketDemoArray]
+                          : isPancakeSort
+                            ? [...pancakeDemoArray]
+                            : generateArray();
     setArr(newArr);
     setComparing([]);
     setSorted(new Set());
@@ -1210,9 +1399,17 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
     setMergeH0(z?.mergeHighlight0 ?? null);
     setMergeH1(z?.mergeHighlight1 ?? null);
     setMergeLogLines(z?.mergeLogs ?? []);
+    setPigeonHoles(z?.pigeonHoles ?? []);
+    setPigeonConsoleLogs(z?.pigeonConsoleLogs ?? []);
+    setQuickLogLines(z?.quickLogs ?? []);
+    setRadixRow0(z?.radixRow0 ?? []);
+    setRadixRow1(z?.radixRow1 ?? []);
+    setRadixRow2(z?.radixRow2 ?? []);
+    setRadixDigitCol(z?.radixDigitCol ?? null);
+    setRadixLogLines(z?.radixLogs ?? []);
     onCodeMarkerChange?.(z?.codeMarker ?? null);
     onStep?.(0, stepsRef.current.length);
-  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, isSelectionSort, isShellsort, isCountingSort, isMergeSort, isBucketSort, isPancakeSort, onCodeMarkerChange, onStep]);
+  }, [algorithmName, isBubbleSort, isCombSort, isCycleSort, isHeapsort, isInsertionSort, isSelectionSort, isShellsort, isCountingSort, isMergeSort, isRadixSort, isPigeonholeSort, isQuicksort, isBucketSort, isPancakeSort, onCodeMarkerChange, onStep]);
 
   useEffect(() => {
     reset();
@@ -1243,6 +1440,14 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
         setMergeH0(s.mergeHighlight0 ?? null);
         setMergeH1(s.mergeHighlight1 ?? null);
         setMergeLogLines(s.mergeLogs ?? []);
+        setPigeonHoles(s.pigeonHoles ?? []);
+        setPigeonConsoleLogs(s.pigeonConsoleLogs ?? []);
+        setQuickLogLines(s.quickLogs ?? []);
+        setRadixRow0(s.radixRow0 ?? []);
+        setRadixRow1(s.radixRow1 ?? []);
+        setRadixRow2(s.radixRow2 ?? []);
+        setRadixDigitCol(s.radixDigitCol ?? null);
+        setRadixLogLines(s.radixLogs ?? []);
         onCodeMarkerChange?.(s.codeMarker ?? null);
         onStep?.(stepRef.current, stepsRef.current.length);
         stepRef.current++;
@@ -1254,6 +1459,109 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
   }, [isPlaying, speed]);
 
   const maxVal = Math.max(1, ...arr);
+
+  if (isPigeonholeSort) {
+    const n = arr.length;
+    const minW = Math.max(n * 22, 120);
+    const holeRows = pigeonHoles.length;
+    const maxSlots = holeRows > 0 ? Math.max(1, ...pigeonHoles.map((r) => r.length)) : 1;
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div>
+          <div className="text-[10px] text-muted-foreground mb-2">Array</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+            <div className="flex justify-center gap-0.5 mb-2 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+              {arr.map((_, i) => (
+                <div key={`pig-a-i-${i}`} className="w-5 shrink-0 text-center text-[9px] text-muted-foreground">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-0.5 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+              {arr.map((val, i) => (
+                <div
+                  key={`pig-a-${i}`}
+                  className="w-5 h-7 shrink-0 flex items-center justify-center text-[10px] font-mono border transition-colors"
+                  style={{
+                    background: comparing.includes(i)
+                      ? "hsl(224, 85%, 58%)"
+                      : sorted.has(i)
+                        ? "hsl(145, 60%, 45%)"
+                        : "hsl(150, 10%, 22%)",
+                    borderColor: comparing.includes(i) ? "hsl(224, 85%, 68%)" : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Holes</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-y-auto max-h-[40vh]">
+            {holeRows === 0 ? (
+              <div className="text-[10px] text-muted-foreground text-center py-2">Press play to start.</div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-2 items-end">
+                  <span className="w-6 shrink-0" />
+                  <div className="flex gap-1 flex-1 overflow-x-auto" style={{ minWidth: `${Math.max(maxSlots * 28, 80)}px` }}>
+                    {Array.from({ length: maxSlots }, (_, j) => (
+                      <div key={`pig-hcol-${j}`} className="w-7 shrink-0 text-center text-[9px] text-muted-foreground">
+                        {j}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {pigeonHoles.map((row, hi) => (
+                  <div key={`pig-hole-${hi}`} className="flex gap-2 items-center mb-2 last:mb-0">
+                    <span className="w-6 shrink-0 text-[10px] text-muted-foreground font-mono text-right">{hi}</span>
+                    <div className="flex gap-1 flex-1 flex-wrap min-h-[1.75rem]">
+                      {row.length === 0 ? (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      ) : (
+                        row.map((v, j) => (
+                          <div
+                            key={`pig-hole-${hi}-${j}-${v}`}
+                            className="min-w-[1.75rem] px-1 h-7 flex items-center justify-center text-[10px] font-mono border border-[hsl(150,10%,28%)] bg-[hsl(150,10%,18%)] text-[hsl(150,20%,88%)]"
+                          >
+                            {v}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">Console</div>
+          <div className="min-h-20 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
+            {pigeonConsoleLogs.length > 0 ? (
+              pigeonConsoleLogs.slice(-12).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 40)}`}>{line}</div>
+              ))
+            ) : (
+              <div className="text-muted-foreground">Press play to start Pigeonhole Sort.</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
 
   if (isMergeSort) {
     const n = Math.max(arr.length, mergeRow0.length, mergeRow1.length, 1);
@@ -1333,6 +1641,133 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
               ))
             ) : (
               <div>Press play to start Merge Sort.</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  if (isRadixSort) {
+    const n = Math.max(arr.length, radixRow0.length, radixRow1.length, 1);
+    const minW = Math.max(n * 22, 120);
+    const row0 = radixRow0.length >= n ? radixRow0 : arr;
+    const row1 = radixRow1.length >= n ? radixRow1 : arr;
+    const row2 = radixRow2.length === 10 ? radixRow2 : Array(10).fill(0);
+    const minW2 = Math.max(10 * 22, 120);
+    const rxActiveBg = "hsl(145, 58%, 38%)";
+    const rxActiveBorder = "hsl(145, 65%, 52%)";
+    const rxSortedBg = "hsl(145, 32%, 22%)";
+    const rxSortedBorder = "hsl(145, 40%, 34%)";
+    const rxBaseBg = "hsl(150, 10%, 22%)";
+    const rxBaseBorder = "hsl(150, 10%, 30%)";
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Array2DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+            <div className="flex gap-2">
+              <div className="flex flex-col shrink-0 text-[10px] text-muted-foreground font-mono pt-6 gap-2 w-4">
+                <span className="h-7 flex items-center">0</span>
+                <span className="h-7 flex items-center">1</span>
+                <span className="h-7 flex items-center">2</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex justify-start gap-0.5 mb-2" style={{ minWidth: `${minW}px` }}>
+                  {Array.from({ length: n }, (_, i) => (
+                    <div key={`rx-h-${i}`} className="w-5 shrink-0 text-center text-[9px] text-muted-foreground">
+                      {i}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start gap-0.5 mb-2" style={{ minWidth: `${minW}px` }}>
+                  {Array.from({ length: n }, (_, i) => {
+                    const val = row0[i] ?? 0;
+                    const hi = comparing.includes(i);
+                    const done = sorted.has(i);
+                    return (
+                      <div
+                        key={`rx-r0-${i}`}
+                        className="w-5 h-7 shrink-0 flex items-center justify-center text-[10px] font-mono border transition-colors"
+                        style={{
+                          background: hi ? rxActiveBg : done ? rxSortedBg : rxBaseBg,
+                          borderColor: hi ? rxActiveBorder : done ? rxSortedBorder : rxBaseBorder,
+                          color: "hsl(150, 20%, 92%)",
+                          boxShadow: hi ? "0 0 0 1px hsl(145, 65%, 45%)" : undefined,
+                        }}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-start gap-0.5 mb-2" style={{ minWidth: `${minW}px` }}>
+                  {Array.from({ length: n }, (_, i) => {
+                    const val = row1[i] ?? 0;
+                    const hi = comparing.includes(i);
+                    const done = sorted.has(i);
+                    return (
+                      <div
+                        key={`rx-r1-${i}`}
+                        className="w-5 h-7 shrink-0 flex items-center justify-center text-[10px] font-mono border transition-colors"
+                        style={{
+                          background: hi ? rxActiveBg : done ? rxSortedBg : rxBaseBg,
+                          borderColor: hi ? rxActiveBorder : done ? rxSortedBorder : rxBaseBorder,
+                          color: "hsl(150, 20%, 92%)",
+                          boxShadow: hi ? "0 0 0 1px hsl(145, 65%, 45%)" : undefined,
+                        }}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-start gap-0.5 mb-2 mt-1" style={{ minWidth: `${minW2}px` }}>
+                  {Array.from({ length: 10 }, (_, j) => (
+                    <div key={`rx-h2-${j}`} className="w-5 shrink-0 text-center text-[9px] text-muted-foreground">
+                      {j}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-start gap-0.5" style={{ minWidth: `${minW2}px` }}>
+                  {row2.map((val, j) => {
+                    const hi = radixDigitCol !== null && radixDigitCol === j;
+                    return (
+                      <div
+                        key={`rx-r2-${j}`}
+                        className="w-5 h-7 shrink-0 flex items-center justify-center text-[10px] font-mono border transition-colors text-[hsl(150,20%,88%)]"
+                        style={{
+                          background: hi ? rxActiveBg : "hsl(150, 10%, 18%)",
+                          borderColor: hi ? rxActiveBorder : "hsl(150, 10%, 28%)",
+                          boxShadow: hi ? "0 0 0 1px hsl(145, 65%, 45%)" : undefined,
+                        }}
+                      >
+                        {val}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
+            {radixLogLines.length > 0 ? (
+              radixLogLines.slice(-12).map((entry, index) => (
+                <div key={`${index}-${entry.slice(0, 48)}`}>{entry}</div>
+              ))
+            ) : (
+              <div>Press play to start Radix Sort.</div>
             )}
           </div>
         </div>
@@ -1887,6 +2322,102 @@ export function BarChartViz({ isPlaying, speed, algorithmName, onStep, onCodeMar
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
             <div>{log || "Press play to start Selection Sort."}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
+  if (isQuicksort) {
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">ChartTracer</div>
+          <div className="flex-1 border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="h-full flex items-end justify-center gap-3">
+              {arr.map((val, i) => {
+                const isComparing = comparing.includes(i);
+                const isSorted = sorted.has(i);
+                const isPivot = pivotIdx === i;
+                return (
+                  <div key={i} className="flex-1 max-w-10 flex flex-col items-center justify-end gap-2 h-full">
+                    <div
+                      className="w-full rounded-t-sm transition-all"
+                      style={{
+                        height: `${(val / maxVal) * 78}%`,
+                        background: isSorted
+                          ? "hsl(145, 60%, 45%)"
+                          : isPivot
+                            ? "hsl(280, 55%, 52%)"
+                            : isComparing
+                              ? "hsl(224, 85%, 58%)"
+                              : "hsl(0, 0%, 72%)",
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">Array1DTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4">
+            <div className="flex justify-center gap-1 mb-2">
+              {arr.map((_, i) => (
+                <div key={`qs-idx-${i}`} className="w-7 text-center text-[10px] text-muted-foreground">
+                  {i}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-1">
+              {arr.map((val, i) => (
+                <div
+                  key={`qs-val-${i}`}
+                  className="w-7 h-7 flex items-center justify-center text-xs font-mono border transition-colors"
+                  style={{
+                    background: pivotIdx === i
+                      ? "hsl(280, 55%, 48%)"
+                      : comparing.includes(i)
+                        ? "hsl(224, 85%, 58%)"
+                        : sorted.has(i)
+                          ? "hsl(145, 60%, 45%)"
+                          : "hsl(150, 10%, 22%)",
+                    borderColor:
+                      pivotIdx === i
+                        ? "hsl(280, 55%, 65%)"
+                        : comparing.includes(i)
+                          ? "hsl(224, 85%, 68%)"
+                          : "hsl(150, 10%, 30%)",
+                    color: "hsl(150, 20%, 92%)",
+                  }}
+                >
+                  {val}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 min-h-28">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-4 text-xs font-mono text-foreground/90 min-h-24">
+            {quickLogLines.length > 0 ? (
+              quickLogLines.slice(-10).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to start Quicksort.</div>
+            )}
           </div>
         </div>
 

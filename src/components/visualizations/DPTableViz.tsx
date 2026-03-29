@@ -6,7 +6,14 @@ interface Props {
   algorithmName: string;
 }
 
-type DPStep = { table: number[] | number[][]; current: [number, number?]; is2D: boolean; labels?: { rows?: string[]; cols?: string[] } };
+type DPStep = {
+  table: number[] | number[][];
+  current: [number, number?];
+  is2D: boolean;
+  labels?: { rows?: string[]; cols?: string[] };
+  /** Cumulative LogTracer lines (e.g. Catalan Number) */
+  dpLogs?: string[];
+};
 
 function fibSteps(n: number): DPStep[] {
   const dp = [0, 1];
@@ -21,19 +28,54 @@ function fibSteps(n: number): DPStep[] {
   return steps;
 }
 
+function catalanOrdinal(k: number): string {
+  const j = k % 10;
+  const kk = k % 100;
+  if (j === 1 && kk !== 11) return `${k}st`;
+  if (j === 2 && kk !== 12) return `${k}nd`;
+  if (j === 3 && kk !== 13) return `${k}rd`;
+  return `${k}th`;
+}
+
+/** LSD-style DP: A[i] += A[j]*A[i-j-1]; one step per inner (i,j) — algorithm-visualizer style. */
 function catalanSteps(n: number): DPStep[] {
   const dp = Array(n + 1).fill(0);
-  dp[0] = 1; dp[1] = 1;
-  const steps: DPStep[] = [
-    { table: [...dp], current: [0], is2D: false },
-    { table: [...dp], current: [1], is2D: false },
-  ];
+  const logs: string[] = [];
+  const steps: DPStep[] = [];
+
+  const push = (idx: number, line?: string) => {
+    if (line) logs.push(line);
+    steps.push({
+      table: [...dp],
+      current: [idx],
+      is2D: false,
+      dpLogs: [...logs],
+    });
+  };
+
+  logs.push(`N = ${n}`);
+  push(0, `initialize A[0..${n}] = 0`);
+  dp[0] = 1;
+  push(0, `A[0] = 1`);
+  dp[1] = 1;
+  push(1, `A[1] = 1`);
+
   for (let i = 2; i <= n; i++) {
     for (let j = 0; j < i; j++) {
-      dp[i] += dp[j] * dp[i - 1 - j];
+      const add = dp[j] * dp[i - 1 - j];
+      dp[i] += add;
+      push(i, `i=${i}, j=${j}: A[${i}] += A[${j}]×A[${i - 1 - j}] → ${dp[i]}`);
     }
-    steps.push({ table: [...dp], current: [i], is2D: false });
   }
+
+  logs.push(`The ${catalanOrdinal(n)} Catalan Number is ${dp[n]}`);
+  steps.push({
+    table: [...dp],
+    current: [n],
+    is2D: false,
+    dpLogs: [...logs],
+  });
+
   return steps;
 }
 
@@ -423,6 +465,71 @@ export function DPTableViz({ isPlaying, speed, algorithmName }: Props) {
   // 1D table (also handles Pascal's triangle which comes as 2D array in steps)
   const table = currentStep.table as number[];
   const [cur] = currentStep.current;
+  const logLines = currentStep.dpLogs ?? [];
+  const isCatalan = algorithmName.includes("Catalan");
+
+  if (isCatalan) {
+    const minW = Math.max(table.length * 28, 160);
+    const hiBg = "hsl(224, 85%, 48%)";
+    const hiBorder = "hsl(224, 85%, 62%)";
+    const doneBg = "hsl(150, 18%, 18%)";
+    const pendingBg = "hsl(150, 12%, 12%)";
+    return (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="text-[10px] text-muted-foreground mb-2">Catalan Numbers</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-3 overflow-x-auto">
+            <div className="flex flex-col gap-1 min-w-min mx-auto" style={{ minWidth: `${minW}px` }}>
+              <div className="flex justify-center gap-1">
+                {table.map((_, i) => (
+                  <div key={`cat-idx-${i}`} className="w-7 shrink-0 text-center text-[9px] text-muted-foreground font-mono">
+                    {i}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-center gap-1">
+                {table.map((val, i) => (
+                  <div
+                    key={`cat-cell-${i}`}
+                    className="w-7 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold border transition-colors"
+                    style={{
+                      background: i === cur ? hiBg : i < cur ? doneBg : pendingBg,
+                      borderColor: i === cur ? hiBorder : "hsl(150, 10%, 26%)",
+                      color: i === cur ? "hsl(210, 40%, 8%)" : "hsl(150, 20%, 88%)",
+                      boxShadow: i === cur ? "0 0 0 1px hsl(224, 85%, 55%)" : undefined,
+                    }}
+                  >
+                    {val}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full mt-4 border-t border-border/20 pt-3">
+          <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
+          <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
+            {logLines.length > 0 ? (
+              logLines.slice(-12).map((line, index) => (
+                <div key={`${index}-${line.slice(0, 48)}`}>{line}</div>
+              ))
+            ) : (
+              <div>Press play to run Catalan Number.</div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={reset}
+          className="mx-auto mt-3 mb-2 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset Array
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-4">
       <div className="text-xs text-muted-foreground mb-2">{algorithmName} — Step-by-step</div>

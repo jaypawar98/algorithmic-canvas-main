@@ -183,6 +183,31 @@ function buildGraph(algorithmName: string): { nodes: Node[]; edges: Edge[] } {
     return { nodes, edges };
   }
 
+  /**
+   * Bellman-Ford reference graph (algorithm-visualizer style):
+   * 0 top, 4 left, 1 right, 2 bottom-right, 3 bottom-left.
+   * 2→3 links the lower row so every node is reachable from source 4.
+   */
+  if (algorithmName.includes("Bellman-Ford")) {
+    const nodes: Node[] = [
+      { id: 0, x: 200, y: 52 },
+      { id: 1, x: 312, y: 168 },
+      { id: 2, x: 268, y: 268 },
+      { id: 3, x: 132, y: 268 },
+      { id: 4, x: 88, y: 168 },
+    ];
+    const edges: Edge[] = [
+      { from: 4, to: 0, weight: 2 },
+      { from: 0, to: 1, weight: 2 },
+      { from: 0, to: 2, weight: 1 },
+      { from: 4, to: 1, weight: 4 },
+      { from: 4, to: 2, weight: -1 },
+      { from: 1, to: 2, weight: 3 },
+      { from: 2, to: 3, weight: 2 },
+    ];
+    return { nodes, edges };
+  }
+
   const count = 8;
   const nodes: Node[] = [];
   for (let i = 0; i < count; i++) {
@@ -204,6 +229,13 @@ function edgeKey(a: number, b: number) { return `${Math.min(a, b)}-${Math.max(a,
 
 function directedEdgeKey(from: number, to: number) {
   return `${from}-${to}`;
+}
+
+/** Matches algorithm-visualizer console output for ∞ distances. */
+const BF_LOG_INF = 2147483647;
+
+function bfWeightsLog(dist: number[]): string {
+  return dist.map((d) => (d === Infinity ? BF_LOG_INF : d)).join(", ");
 }
 
 function bfsSteps(nodes: Node[], edges: Edge[]): GStep[] {
@@ -469,27 +501,69 @@ function primSteps(nodes: Node[], edges: Edge[]): GStep[] {
 
 function bellmanFordSteps(nodes: Node[], edges: Edge[]): GStep[] {
   const n = nodes.length;
+  const SRC = 4;
   const dist = Array(n).fill(Infinity);
-  dist[0] = 0;
+  dist[SRC] = 0;
   const steps: GStep[] = [];
-  const relaxedEdges: string[] = [];
+  const logs: string[] = [];
 
-  for (let i = 0; i < n - 1; i++) {
+  const labelsFromDist = (): Record<number, string> => {
+    const labels: Record<number, string> = {};
+    for (let v = 0; v < n; v++) labels[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
+    return labels;
+  };
+
+  const push = (current: number, active: string[]) => {
+    steps.push({
+      visited: dist.map((d, i) => (d < Infinity ? i : -1)).filter((x) => x >= 0),
+      current,
+      activeEdges: active,
+      nodeLabels: labelsFromDist(),
+      logs: [...logs],
+    });
+  };
+
+  logs.push(`source = ${SRC}`);
+  logs.push(`initial weights: [${bfWeightsLog(dist)}]`);
+  push(SRC, []);
+
+  for (let k = 0; k < n - 1; k++) {
+    logs.push(`pass ${k + 1} / ${n - 1}`);
     for (const e of edges) {
-      const labels: Record<number, string> = {};
-      for (let v = 0; v < n; v++) labels[v] = dist[v] === Infinity ? "∞" : String(dist[v]);
-      if (dist[e.from] !== Infinity && dist[e.from] + e.weight < dist[e.to]) {
-        dist[e.to] = dist[e.from] + e.weight;
-        relaxedEdges.push(edgeKey(e.from, e.to));
-        steps.push({ visited: dist.map((d, i) => d < Infinity ? i : -1).filter(x => x >= 0), current: e.to, activeEdges: [...relaxedEdges], nodeLabels: labels });
-      }
-      if (dist[e.to] !== Infinity && dist[e.to] + e.weight < dist[e.from]) {
-        dist[e.from] = dist[e.to] + e.weight;
-        relaxedEdges.push(edgeKey(e.from, e.to));
-        steps.push({ visited: dist.map((d, i) => d < Infinity ? i : -1).filter(x => x >= 0), current: e.from, activeEdges: [...relaxedEdges], nodeLabels: labels });
+      const { from: u, to: v, weight: w } = e;
+      const ek = directedEdgeKey(u, v);
+      logs.push(`${u} -> ${v} (w=${w})`);
+      push(v, [ek]);
+      if (dist[u] !== Infinity && dist[u] + w < dist[v]) {
+        dist[v] = dist[u] + w;
+        logs.push(`relax: dist[${v}] = ${dist[v]}`);
+        logs.push(`updated weights: [${bfWeightsLog(dist)}]`);
+        push(v, [ek]);
       }
     }
   }
+
+  logs.push("checking for negative cycle");
+  push(SRC, []);
+  let hasNegCycle = false;
+  for (const e of edges) {
+    const { from: u, to: v, weight: w } = e;
+    if (dist[u] !== Infinity && dist[u] + w < dist[v]) {
+      hasNegCycle = true;
+      break;
+    }
+  }
+
+  if (hasNegCycle) {
+    logs.push("Negative cycle detected.");
+  } else {
+    logs.push(`No cycles detected. Final weights for the source ${SRC} are: [${bfWeightsLog(dist)}]`);
+    for (let i = 0; i < n; i++) {
+      if (dist[i] === Infinity) logs.push(`there is no path from ${SRC} to ${i}`);
+    }
+  }
+  push(SRC, []);
+
   return steps;
 }
 
@@ -1087,7 +1161,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         setVisited(new Set(s.visited));
         setCurrentNode(s.current < 0 ? null : s.current);
         setActiveEdges(new Set(s.activeEdges));
-        if (s.nodeLabels) setNodeLabels(s.nodeLabels);
+        setNodeLabels(s.nodeLabels ?? {});
         setDistanceLabels(s.distanceLabels ?? {});
         setLogs(s.logs ?? []);
         setColors(s.colors ?? []);
@@ -1108,14 +1182,14 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   }, [isPlaying, speed]);
 
   const reset = () => {
-    setVisited(new Set());
-    setActiveEdges(new Set());
-    setCurrentNode(null);
-    setNodeLabels({});
-    setDistanceLabels(stepsRef.current[0]?.distanceLabels ?? {});
-    setLogs(stepsRef.current[0]?.logs ?? []);
-    setColors(stepsRef.current[0]?.colors ?? []);
     const z = stepsRef.current[0];
+    setVisited(new Set(z?.visited ?? []));
+    setActiveEdges(new Set(z?.activeEdges ?? []));
+    setCurrentNode(z && z.current < 0 ? null : z?.current ?? null);
+    setNodeLabels(z?.nodeLabels ?? {});
+    setDistanceLabels(z?.distanceLabels ?? {});
+    setLogs(z?.logs ?? []);
+    setColors(z?.colors ?? []);
     setPageRanks(z?.pageRanks ?? []);
     setOutDegrees(z?.outDegrees ?? []);
     setIncomingMatrix(z?.incomingMatrix ?? []);
@@ -1138,17 +1212,18 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
   const isBridgeFinding = algorithmName.includes("Bridge");
   const isPageRank = algorithmName.includes("PageRank");
   const isTarjan = algorithmName.includes("Tarjan") || algorithmName.includes("Strongly Connected");
+  const isBellmanFord = algorithmName.includes("Bellman-Ford");
 
   return (
-    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan) ? "justify-start pt-2" : "justify-center"}`}>
+    <div className={`w-full h-full flex flex-col items-center ${(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) ? "justify-start pt-2" : "justify-center"}`}>
       {isPageRank && (
         <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">Web Page inter-connections</div>
       )}
-      {isTarjan && (
+      {(isTarjan || isBellmanFord) && (
         <div className="text-[10px] text-muted-foreground mb-2 w-full max-w-[24rem] self-center">GraphTracer</div>
       )}
-      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : isTarjan ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
-        {(isTopological || isPageRank || isTarjan) && (
+      <svg viewBox="0 0 400 340" className={isDepthLimited ? "w-full max-w-[18rem] h-[14rem]" : isTopological ? "w-full max-w-[24rem] h-[18rem]" : isBipartite ? "w-full max-w-[18rem] h-[14rem]" : isBFS ? "w-full max-w-[24rem] h-[18rem]" : isDFS ? "w-full max-w-[24rem] h-[18rem]" : isBridgeFinding ? "w-full max-w-[24rem] h-[18rem]" : isPageRank ? "w-full max-w-[24rem] h-[16rem]" : isTarjan || isBellmanFord ? "w-full max-w-[24rem] h-[16rem]" : "w-full max-w-md"}>
+        {(isTopological || isPageRank || isTarjan || isBellmanFord) && (
           <defs>
             <marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(0, 0%, 72%)" />
@@ -1158,7 +1233,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.edges.map((e) => {
           const from = graph.nodes[e.from];
           const to = graph.nodes[e.to];
-          const ek = (isPageRank || isTarjan) ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
+          const ek = (isPageRank || isTarjan || isBellmanFord) ? directedEdgeKey(e.from, e.to) : edgeKey(e.from, e.to);
           const active = activeEdges.has(ek);
           const edgeStroke = isBipartite
             ? active ? "hsl(330, 85%, 48%)" : "hsl(0, 0%, 72%)"
@@ -1170,6 +1245,8 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 ? active ? "hsl(0, 0%, 78%)" : "hsl(0, 0%, 52%)"
               : isTarjan
                 ? active ? "hsl(330, 85%, 58%)" : "hsl(0, 0%, 55%)"
+              : isBellmanFord
+                ? active ? "hsl(0, 0%, 92%)" : "hsl(0, 0%, 68%)"
             : active ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 25%)";
           return (
             <g key={ek}>
@@ -1177,13 +1254,14 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 x1={from.x} y1={from.y} x2={to.x} y2={to.y}
                 stroke={edgeStroke}
                 strokeWidth={active ? 3 : 1.5}
-                opacity={(isBipartite || isBFS || isDFS || isPageRank || isTarjan) ? 1 : active ? 1 : 0.5}
-                markerEnd={isTopological || isPageRank || isTarjan ? "url(#graph-arrow)" : undefined}
+                opacity={(isBipartite || isBFS || isDFS || isPageRank || isTarjan || isBellmanFord) ? 1 : active ? 1 : 0.5}
+                markerEnd={isTopological || isPageRank || isTarjan || isBellmanFord ? "url(#graph-arrow)" : undefined}
               />
               {showWeights && (
                 <text
                   x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 5}
-                  fill="hsl(150, 10%, 55%)" fontSize="9" textAnchor="middle"
+                  fill={isBellmanFord ? "hsl(0, 0%, 72%)" : "hsl(150, 10%, 55%)"}
+                  fontSize="9" textAnchor="middle"
                 >
                   {e.weight}
                 </text>
@@ -1194,7 +1272,7 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
         {graph.nodes.map((n) => {
           const isVisited = visited.has(n.id);
           const isCurrent = currentNode === n.id;
-          const label = isPageRank ? String(n.id) : nodeLabels[n.id];
+          const label = isPageRank ? String(n.id) : isBellmanFord ? String(n.id) : nodeLabels[n.id];
           const colorValue = colors[n.id];
           const bipartiteFill = colorValue === 0
             ? "hsl(330, 85%, 48%)"
@@ -1204,9 +1282,17 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           const tarjanVisited = isTarjan && isVisited;
           return (
             <g key={n.id}>
-              {isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan && (
+              {isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan && !isBellmanFord && (
                 <circle cx={n.x} cy={n.y} r={22} fill="none"
                   stroke="hsl(145, 60%, 45%)" strokeWidth={2} opacity={0.4} />
+              )}
+              {isCurrent && isBellmanFord && (
+                <>
+                  <circle cx={n.x} cy={n.y} r={26} fill="none"
+                    stroke="hsl(215, 90%, 58%)" strokeWidth={2.5} opacity={0.35} />
+                  <circle cx={n.x} cy={n.y} r={21} fill="none"
+                    stroke="hsl(215, 95%, 62%)" strokeWidth={2} opacity={0.85} />
+                </>
               )}
               {isCurrent && isPageRank && (
                 <circle cx={n.x} cy={n.y} r={22} fill="none"
@@ -1220,18 +1306,32 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
                 cx={n.x} cy={n.y} r={16}
                 fill={isPageRank
                   ? (isCurrent ? "hsl(330, 85%, 42%)" : "hsl(150, 20%, 14%)")
+                  : isBellmanFord
+                    ? (isCurrent ? "hsl(215, 88%, 48%)" : isVisited ? "hsl(220, 8%, 22%)" : "hsl(220, 6%, 16%)")
                   : isTarjan
                     ? (tarjanVisited ? (isCurrent ? "hsl(330, 85%, 52%)" : "hsl(330, 85%, 42%)") : "hsl(150, 20%, 14%)")
                   : isBipartite ? bipartiteFill : isBFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isDFS ? (isVisited ? "hsl(330, 85%, 48%)" : "hsl(150, 20%, 12%)") : isCurrent ? "hsl(145, 60%, 45%)" : isVisited ? "hsl(150, 30%, 20%)" : "hsl(150, 20%, 12%)"}
-                stroke={isPageRank ? (isCurrent ? "hsl(330, 85%, 60%)" : "hsl(0, 0%, 45%)") : isTarjan ? (tarjanVisited ? "hsl(330, 85%, 65%)" : "hsl(0, 0%, 45%)") : isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
-                strokeWidth={(isVisited || isPageRank || (isTarjan && tarjanVisited)) ? 2 : 1}
+                stroke={isPageRank ? (isCurrent ? "hsl(330, 85%, 60%)" : "hsl(0, 0%, 45%)") : isBellmanFord ? (isCurrent ? "hsl(215, 95%, 72%)" : "hsl(0, 0%, 52%)") : isTarjan ? (tarjanVisited ? "hsl(330, 85%, 65%)" : "hsl(0, 0%, 45%)") : isBipartite ? "hsl(330, 85%, 58%)" : isBFS ? "hsl(330, 85%, 58%)" : isDFS ? "hsl(330, 85%, 58%)" : isVisited ? "hsl(145, 60%, 45%)" : "hsl(150, 15%, 30%)"}
+                strokeWidth={(isVisited || isPageRank || (isTarjan && tarjanVisited) || (isBellmanFord && isVisited)) ? 2 : 1}
               />
               <text x={n.x} y={n.y + 4}
-                fill={isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
+                fill={isCurrent && !isBipartite && !isBFS && !isDFS && !isPageRank && !isTarjan && !isBellmanFord ? "hsl(150, 30%, 4%)" : "hsl(150, 20%, 92%)"}
                 fontSize="11" textAnchor="middle" fontWeight={600}
               >
                 {label || n.id}
               </text>
+              {isBellmanFord && nodeLabels[n.id] !== undefined && (
+                <text
+                  x={n.x + 26}
+                  y={n.y + 5}
+                  fill="hsl(0, 0%, 96%)"
+                  fontSize="12"
+                  textAnchor="middle"
+                  fontWeight={600}
+                >
+                  {nodeLabels[n.id]}
+                </text>
+              )}
               {isBFS && distanceLabels[n.id] && (
                 <text
                   x={n.x + 26}
@@ -1447,15 +1547,15 @@ export function GraphViz({ isPlaying, speed, algorithmName, onCodeMarkerChange }
           </div>
         </>
       )}
-      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan) && (
+      {(isDepthLimited || isTopological || isBipartite || isBFS || isDFS || isBridgeFinding || isPageRank || isTarjan || isBellmanFord) && (
         <div className="w-full mt-6 border-t border-border/20 pt-3 max-w-[24rem]">
           <div className="text-[10px] text-muted-foreground mb-2">LogTracer</div>
           <div className="min-h-24 rounded-md border border-border/20 bg-black/10 p-4 text-xs font-mono text-foreground/90">
-            {logs.length > 0 ? logs.slice(-8).map((entry, index) => (
+            {logs.length > 0 ? logs.slice(-12).map((entry, index) => (
               <div key={`${index}-${entry}`}>{entry}</div>
             )) : (
               <div>
-                {isPageRank ? "Press play to run PageRank." : isTarjan ? "Press play to run Tarjan SCC." : "Press play to start the search."}
+                {isPageRank ? "Press play to run PageRank." : isTarjan ? "Press play to run Tarjan SCC." : isBellmanFord ? "Press play to run Bellman-Ford." : "Press play to start the search."}
               </div>
             )}
           </div>
