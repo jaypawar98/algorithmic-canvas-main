@@ -14,6 +14,10 @@ type TextStep = {
   info?: string;
   /** Cumulative log lines (e.g. Rabin-Karp + LogTracer panel) */
   logs?: string[];
+  /** KMP Pattern panel: LPS row + pattern row highlights (column indices in pattern). */
+  kmpLps?: number[];
+  kmpLpsHighlightCols?: number[];
+  kmpPhase?: "lps" | "search";
 };
 
 function naiveSearch(text: string, pattern: string): TextStep[] {
@@ -32,34 +36,120 @@ function naiveSearch(text: string, pattern: string): TextStep[] {
 
 function kmpSearch(text: string, pattern: string): TextStep[] {
   const steps: TextStep[] = [];
-  // Build failure function
-  const lps = Array(pattern.length).fill(0);
-  let len = 0, i = 1;
-  while (i < pattern.length) {
-    if (pattern[i] === pattern[len]) { len++; lps[i] = len; i++; }
-    else if (len !== 0) len = lps[len - 1];
-    else { lps[i] = 0; i++; }
+  const m = pattern.length;
+  const lps = Array(m).fill(0);
+
+  const pushLps = (cols: number[], info: string) => {
+    steps.push({
+      textHighlight: [],
+      patternPos: 0,
+      patternHighlight: [],
+      kmpPhase: "lps",
+      kmpLps: [...lps],
+      kmpLpsHighlightCols: cols,
+      info,
+    });
+  };
+
+  pushLps([0], "Build LPS: lps[0] = 0 (base).");
+  let len = 0;
+  let i = 1;
+  while (i < m) {
+    pushLps([i, len], `Compare pattern[${i}]='${pattern[i]}' with pattern[${len}]='${pattern[len]}' (len=${len}).`);
+    if (pattern[i] === pattern[len]) {
+      len++;
+      lps[i] = len;
+      pushLps([i], `Match → lps[${i}] = ${len}.`);
+      i++;
+    } else if (len !== 0) {
+      const nextLen = lps[len - 1];
+      pushLps([i], `Mismatch → len = lps[${len - 1}] = ${nextLen}.`);
+      len = nextLen;
+    } else {
+      lps[i] = 0;
+      pushLps([i], `len = 0 → lps[${i}] = 0.`);
+      i++;
+    }
   }
-  // Search
-  let ti = 0, pi = 0;
+
+  const finalLps = [...lps];
+  steps.push({
+    textHighlight: [],
+    patternPos: 0,
+    patternHighlight: [],
+    kmpPhase: "search",
+    kmpLps: finalLps,
+    kmpLpsHighlightCols: [],
+    info: "LPS ready — search phase.",
+  });
+
+  let ti = 0;
+  let pi = 0;
   while (ti < text.length) {
-    steps.push({ textHighlight: [ti], patternPos: ti - pi, patternHighlight: [pi], info: `KMP: Compare text[${ti}] with pattern[${pi}]` });
+    steps.push({
+      textHighlight: [ti],
+      patternPos: ti - pi,
+      patternHighlight: [pi],
+      kmpPhase: "search",
+      kmpLps: finalLps,
+      kmpLpsHighlightCols: [pi],
+      info: `Compare text[${ti}]='${text[ti]}' with pattern[${pi}]='${pattern[pi]}'`,
+    });
     if (text[ti] === pattern[pi]) {
-      ti++; pi++;
-      if (pi === pattern.length) {
+      ti++;
+      pi++;
+      if (pi === m) {
         const start = ti - pi;
-        steps.push({ textHighlight: Array.from({ length: pattern.length }, (_, k) => start + k), patternPos: start, patternHighlight: Array.from({ length: pattern.length }, (_, k) => k), matchFound: start, info: `Match found at ${start}!` });
+        steps.push({
+          textHighlight: Array.from({ length: m }, (_, k) => start + k),
+          patternPos: start,
+          patternHighlight: Array.from({ length: m }, (_, k) => k),
+          matchFound: start,
+          kmpPhase: "search",
+          kmpLps: finalLps,
+          kmpLpsHighlightCols: Array.from({ length: m }, (_, k) => k),
+          info: `Match found at index ${start}!`,
+        });
         pi = lps[pi - 1];
       }
     } else {
       if (pi !== 0) {
-        pi = lps[pi - 1];
-        steps.push({ textHighlight: [], patternPos: ti - pi, patternHighlight: [], info: `KMP: Shift using LPS, pi=${pi}` });
+        const newPi = lps[pi - 1];
+        steps.push({
+          textHighlight: [ti],
+          patternPos: ti - newPi,
+          patternHighlight: [],
+          kmpPhase: "search",
+          kmpLps: finalLps,
+          kmpLpsHighlightCols: [pi, newPi],
+          info: `Mismatch → pi = lps[${pi - 1}] = ${newPi}`,
+        });
+        pi = newPi;
       } else {
+        steps.push({
+          textHighlight: [ti],
+          patternPos: ti,
+          patternHighlight: [],
+          kmpPhase: "search",
+          kmpLps: finalLps,
+          kmpLpsHighlightCols: [],
+          info: `Mismatch at start of pattern → advance text index.`,
+        });
         ti++;
       }
     }
   }
+
+  steps.push({
+    textHighlight: [],
+    patternPos: Math.max(0, text.length - m),
+    patternHighlight: [],
+    kmpPhase: "search",
+    kmpLps: finalLps,
+    kmpLpsHighlightCols: [],
+    info: "Search finished.",
+  });
+
   return steps;
 }
 
@@ -219,7 +309,12 @@ function suffixArraySteps(text: string): TextStep[] {
 function getTextSteps(name: string): { text: string; pattern: string; steps: TextStep[] } {
   const text = "ABCABCDABABCDABCDABDE";
   const pattern = "ABCDABD";
-  if (name.includes("KMP") || name.includes("Knuth-Morris")) return { text, pattern, steps: kmpSearch(text, pattern) };
+  /** algorithm-visualizer.org demo: pattern AAAABAAA, text length 21 */
+  if (name.includes("KMP") || name.includes("Knuth-Morris")) {
+    const kmpText = "AAAABAAABAAAABAAABAAA";
+    const kmpPattern = "AAAABAAA";
+    return { text: kmpText, pattern: kmpPattern, steps: kmpSearch(kmpText, kmpPattern) };
+  }
   if (name.includes("Rabin-Karp")) return { text, pattern, steps: rabinKarpSearch(text, pattern) };
   if (name.includes("Z String")) return { text, pattern, steps: zSearch(text, pattern) };
   if (name.includes("Caesar")) return { text: "HELLO WORLD", pattern: "", steps: caesarCipherSteps("HELLO WORLD") };
@@ -261,9 +356,168 @@ export function TextViz({ isPlaying, speed, algorithmName }: Props) {
   const isCipher = algorithmName.includes("Caesar") || algorithmName.includes("Affine");
   const isSuffix = algorithmName.includes("Suffix");
   const isRabinKarp = algorithmName.includes("Rabin-Karp");
-  const showPatternRow = !isCipher && !isSuffix && pattern && (step !== null || isRabinKarp);
+  const isKmp = algorithmName.includes("KMP") || algorithmName.includes("Knuth-Morris");
+  const showPatternRow =
+    !isCipher && !isSuffix && !isKmp && pattern && (step !== null || isRabinKarp);
   const patternPos = step?.patternPos ?? 0;
   const patternHighlight = step?.patternHighlight ?? [];
+
+  if (isKmp && !step) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 px-2">
+        <div className="text-xs text-muted-foreground text-center">
+          {algorithmName} — Press Play for Pattern + String
+        </div>
+        <button
+          type="button"
+          onClick={reset}
+          className="text-[10px] text-muted-foreground hover:text-primary transition-colors"
+        >
+          Reset
+        </button>
+      </div>
+    );
+  }
+
+  if (isKmp && step) {
+    const m = pattern.length;
+    const lpsRow = step.kmpLps ?? Array(m).fill(0);
+    const lpsCols = step.kmpLpsHighlightCols ?? [];
+    const patCols = step.patternHighlight;
+    const highlightLpsCell = (j: number) =>
+      lpsCols.includes(j) || (step.kmpPhase === "search" && patCols.includes(j));
+    const highlightPatCell = (j: number) =>
+      step.kmpPhase === "lps"
+        ? lpsCols.includes(j)
+        : patCols.length > 0
+          ? patCols.includes(j)
+          : lpsCols.includes(j);
+
+    const cellPattern = (highlight: boolean) => ({
+      background: highlight ? "hsl(45, 65%, 26%)" : "hsl(150, 15%, 12%)",
+      color: highlight ? "hsl(45, 95%, 88%)" : "hsl(150, 20%, 78%)",
+      border: `1px solid ${highlight ? "hsl(45, 75%, 42%)" : "hsl(150, 15%, 22%)"}`,
+    });
+
+    const cellText = (i: number) => {
+      const inMatch =
+        step.matchFound !== undefined &&
+        i >= step.matchFound &&
+        i < step.matchFound + m;
+      const hi = step.textHighlight.includes(i);
+      return {
+        background: inMatch
+          ? "hsl(145, 60%, 32%)"
+          : hi
+            ? "hsl(45, 65%, 26%)"
+            : "hsl(150, 15%, 12%)",
+        color: inMatch
+          ? "hsl(150, 30%, 6%)"
+          : hi
+            ? "hsl(45, 95%, 88%)"
+            : "hsl(150, 20%, 78%)",
+        border: `1px solid ${
+          inMatch ? "hsl(145, 55%, 40%)" : hi ? "hsl(45, 75%, 42%)" : "hsl(150, 15%, 22%)"
+        }`,
+      };
+    };
+
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 gap-3 px-1 py-1 overflow-auto font-mono">
+        <div className="text-[10px] text-muted-foreground shrink-0">{algorithmName}</div>
+
+        <div className="shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">Pattern</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+            <table className="border-collapse text-center">
+              <thead>
+                <tr>
+                  <th className="w-6 h-6 sm:w-7 sm:h-7" />
+                  {Array.from({ length: m }, (_, j) => (
+                    <th
+                      key={`pch-${j}`}
+                      className="w-6 h-6 sm:w-7 sm:h-7 text-[8px] sm:text-[9px] text-muted-foreground font-normal px-0.5"
+                    >
+                      {j}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="text-[8px] sm:text-[9px] text-muted-foreground pr-1">0</td>
+                  {lpsRow.map((v, j) => (
+                    <td
+                      key={`lps-${j}`}
+                      className="w-6 h-7 sm:w-7 sm:h-8 text-[10px] sm:text-xs transition-colors duration-100"
+                      style={cellPattern(highlightLpsCell(j))}
+                    >
+                      {v}
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <td className="text-[8px] sm:text-[9px] text-muted-foreground pr-1">1</td>
+                  {pattern.split("").map((ch, j) => (
+                    <td
+                      key={`pch-${j}`}
+                      className="w-6 h-7 sm:w-7 sm:h-8 text-[10px] sm:text-xs transition-colors duration-100"
+                      style={cellPattern(highlightPatCell(j))}
+                    >
+                      {ch}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="w-full border-t border-border/20 pt-3 shrink-0">
+          <div className="text-[10px] text-muted-foreground mb-2">String</div>
+          <div className="border border-border/20 bg-black/10 rounded-md p-2 overflow-x-auto">
+            <div className="flex flex-col gap-0.5 min-w-min">
+              <div className="flex gap-0.5">
+                {text.split("").map((_, i) => (
+                  <div
+                    key={`ti-${i}`}
+                    className="w-5 h-5 sm:w-5 shrink-0 flex items-center justify-center text-[7px] sm:text-[8px] text-muted-foreground"
+                  >
+                    {i}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-0.5">
+                {text.split("").map((ch, i) => (
+                  <div
+                    key={`tch-${i}`}
+                    className="w-5 h-7 sm:w-5 sm:h-8 shrink-0 flex items-center justify-center text-[10px] sm:text-xs transition-colors duration-100"
+                    style={cellText(i)}
+                  >
+                    {ch}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {step.info && (
+          <div className="text-[10px] text-muted-foreground font-mono px-1 text-center shrink-0">
+            {step.info}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={reset}
+          className="text-[10px] text-muted-foreground hover:text-primary transition-colors mx-auto shrink-0"
+        >
+          Reset
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-6">

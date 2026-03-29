@@ -1505,18 +1505,18 @@ void radixSort(int arr[], int n) {
       code: c("Fibonacci",
         `public class Fibonacci {
     public static int fib(int n) {
-        int[] dp = new int[n+1]; dp[0]=0; dp[1]=1;
+        int[] dp = new int[n+1]; dp[0]=1; dp[1]=1;
         for (int i=2; i<=n; i++) dp[i] = dp[i-1] + dp[i-2];
         return dp[n];
     }
 }`,
         `int fibonacci(int n) {
-    int dp[n+1]; dp[0]=0; dp[1]=1;
+    int dp[n+1]; dp[0]=1; dp[1]=1;
     for (int i=2; i<=n; i++) dp[i]=dp[i-1]+dp[i-2];
     return dp[n];
 }`,
         `function fibonacci(n) {
-    const dp = [0, 1];
+    const dp = [1, 1];
     for (let i = 2; i <= n; i++) dp[i] = dp[i-1] + dp[i-2];
     return dp[n];
 }`) },
