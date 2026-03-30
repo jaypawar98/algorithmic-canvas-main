@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { Play, Code2, BarChart3, GitBranch, Sparkles, Grid3X3, TreeDeciduous, Activity, Layers, Table, TrendingUp, Repeat, Box } from "lucide-react";
@@ -16,6 +17,7 @@ const categories = [
 const ease = [0.25, 0.46, 0.45, 0.94] as const;
 
 const Home = () => {
+  const [step, setStep] = useState<1 | 2>(1);
   const navigate = useNavigate();
   const { scrollYProgress } = useScroll();
   const heroOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0.85]);
@@ -64,8 +66,9 @@ const Home = () => {
       ))}
 
       {/* ─── Hero Section ─── */}
-      <motion.section
-        style={{ opacity: heroOpacity }}
+      {step === 1 && (
+        <motion.section
+          style={{ opacity: heroOpacity }}
         className="relative z-10 flex flex-col items-center text-center w-full max-w-2xl px-5 sm:px-8 pt-[12vh] sm:pt-[14vh] pb-12"
       >
         {/* Glass card */}
@@ -137,7 +140,7 @@ const Home = () => {
 
           {/* CTA Button */}
           <motion.button
-            onClick={() => navigate("/visualizer")}
+            onClick={() => setStep(2)}
             className="group relative inline-flex items-center gap-2.5 px-7 sm:px-8 py-3 sm:py-3.5 rounded-2xl font-semibold text-sm transition-all duration-300"
             style={{
               background: "linear-gradient(135deg, hsl(145,60%,40%) 0%, hsl(160,55%,35%) 100%)",
@@ -184,11 +187,37 @@ const Home = () => {
           )}
         </motion.div>
       </motion.section>
+      )}
 
       {/* ─── Categories Section ─── */}
-      <motion.section
-        className="relative z-10 w-full max-w-4xl px-5 sm:px-8 pt-4 pb-20"
-        initial={{ opacity: 0, y: 25 }}
+      {step === 2 && (
+        <>
+          {/* Skip Button */}
+          <motion.div 
+            className="absolute top-6 right-6 sm:top-8 sm:right-8 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <button
+              onClick={() => navigate("/visualizer")}
+              className="group flex flex-row items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-[1.03] active:scale-[0.97]"
+              style={{
+                background: "hsl(150,20%,8%,0.65)",
+                border: "1px solid hsl(145,60%,45%,0.3)",
+                color: "hsl(145,60%,45%)",
+                backdropFilter: "blur(12px)",
+                boxShadow: "0 4px 20px hsl(0,0%,0%,0.2), inset 0 1px 0 hsl(145,60%,45%,0.15)",
+              }}
+            >
+              Skip
+              <Sparkles className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+            </button>
+          </motion.div>
+
+          <motion.section
+            className="relative z-10 w-full max-w-4xl px-5 sm:px-8 pt-[12vh] sm:pt-[14vh] pb-20"
+            initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-60px" }}
         transition={{ duration: 0.6, ease }}
@@ -251,6 +280,8 @@ const Home = () => {
           })}
         </div>
       </motion.section>
+        </>
+      )}
     </div>
   );
 };
